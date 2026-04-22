@@ -4,7 +4,7 @@ use crate::provider::{create_provider, ModelId};
 use anyhow::{anyhow, Result};
 use std::path::PathBuf;
 
-pub async fn run_summarize_loop(files: Vec<PathBuf>, config: Config, model_str: &str, debug: bool) -> Result<()> {
+pub async fn run_summarize_loop(files: Vec<PathBuf>, config: Config, model_str: &str, debug: bool, instruction: &str) -> Result<()> {
     if files.is_empty() {
         return Err(anyhow!("No files provided."));
     }
@@ -29,84 +29,86 @@ pub async fn run_summarize_loop(files: Vec<PathBuf>, config: Config, model_str: 
     let effective_limit = api_limit.saturating_sub(4000);
     let max_chars = effective_limit * 4;
 
-    let instruction = config
-        .instruction
-        .clone()
-        .unwrap_or_else(|| "Fasse die bisherigen Inhalte und den neuen Text logisch zusammen.".to_string());
+
+    // 1. Convert list of files into list of batches using an iterator
+    let batches: Vec<Vec<PathBuf>> = files
+        .into_iter()
+        .fold(vec![(0_usize, Vec::new())], |mut acc, path| {
+            // Estimate token usage via file size (bytes roughly equal chars for ASCII/UTF-8)
+            let size = std::fs::metadata(&path).map(|m| m.len() as usize).unwrap_or(0);
+            
+            let last_idx = acc.len() - 1;
+            let (current_size, batch) = &mut acc[last_idx];
+
+            if !batch.is_empty() && (*current_size + size > max_chars) {
+                acc.push((size, vec![path]));
+            } else {
+                *current_size += size;
+                batch.push(path);
+            }
+            acc
+        })
+        .into_iter()
+        .map(|(_, batch)| batch)
+        .filter(|batch| !batch.is_empty())
+        .collect();
 
     let mut previous_result: Option<String> = None;
-    let mut current_batch: Vec<ProcessedFile> = Vec::new();
-    let mut current_batch_chars = 0;
+    let total_files: usize = batches.iter().map(|b| b.len()).sum();
+    let mut processed_count = 0;
 
-    for (i, file_path) in files.iter().enumerate() {
-        if !file_path.exists() {
-            eprintln!("Warning: File not found: {}", file_path.display());
-            continue;
-        }
+    // 2. Process each batch
+    for (batch_idx, batch_paths) in batches.iter().enumerate() {
+        let mut current_batch: Vec<ProcessedFile> = Vec::new();
+        let mut batch_chars = 0;
 
-        let processed = match file::read_file(file_path).await {
-            Ok(p) => p,
-            Err(e) => {
-                eprintln!("Warning: {} - Skipping: {}", e, file_path.display());
+        for file_path in batch_paths {
+            processed_count += 1;
+
+            if !file_path.exists() {
+                eprintln!("Warning: File not found: {}", file_path.display());
                 continue;
             }
-        };
 
-        let file_chars = match &processed.data {
-            FileData::Text(c) => c.len(),
-        };
+            match file::read_file(&file_path).await {
+                Ok(processed) => {
+                    let file_chars = match &processed.data {
+                        FileData::Text(c) => c.len(),
+                    };
+                    batch_chars += file_chars;
 
-        // If batch is not empty and adding this file exceeds limit, process batch
-        if !current_batch.is_empty() && (current_batch_chars + file_chars > max_chars) {
-            eprintln!("Batch-Limit erreicht. Sende Request für {} Dateien...", current_batch.len());
+                    if debug {
+                        eprintln!("[{}/{}] Adding to batch: {}", processed_count, total_files, file_path.display());
+                    }
+                    current_batch.push(processed);
+                }
+                Err(e) => {
+                    eprintln!("Warning: {} - Skipping: {}", e, file_path.display());
+                }
+            }
+        }
+
+        if !current_batch.is_empty() {
+            let is_last_batch = batch_idx == batches.len() - 1;
+
+            if is_last_batch {
+                eprintln!("Sende finalen Batch mit {} Dateien...", current_batch.len());
+            } else if current_batch.len() == 1 && batch_chars > max_chars {
+                eprintln!("Einzeldatei überschreitet Kontext-Limit. Sende sofort...");
+            } else {
+                eprintln!("Batch-Limit erreicht. Sende Request für {} Dateien...", current_batch.len());
+            }
+
             let new_result = provider
                 .complete(
-                    &instruction,
+                    instruction,
                     &current_batch,
                     previous_result.as_deref(),
                     &model_id.model,
                 )
                 .await?;
             previous_result = Some(new_result);
-            current_batch.clear();
-            current_batch_chars = 0;
         }
-
-        if debug {
-            eprintln!("[{}/{}] Adding to batch: {}", i + 1, files.len(), file_path.display());
-        }
-        current_batch_chars += file_chars;
-        current_batch.push(processed);
-
-        // If a single file is already over the limit, we send it anyway (per plan)
-        if current_batch_chars > max_chars {
-             eprintln!("Einzeldatei überschreitet Kontext-Limit. Sende sofort...");
-             let new_result = provider
-                .complete(
-                    &instruction,
-                    &current_batch,
-                    previous_result.as_deref(),
-                    &model_id.model,
-                )
-                .await?;
-            previous_result = Some(new_result);
-            current_batch.clear();
-            current_batch_chars = 0;
-        }
-    }
-
-    // Process remaining batch
-    if !current_batch.is_empty() {
-        eprintln!("Sende finalen Batch mit {} Dateien...", current_batch.len());
-        let new_result = provider
-            .complete(
-                &instruction,
-                &current_batch,
-                previous_result.as_deref(),
-                &model_id.model,
-            )
-            .await?;
-        previous_result = Some(new_result);
     }
 
     if let Some(final_result) = previous_result {

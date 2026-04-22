@@ -43,7 +43,18 @@ async fn main() -> Result<()> {
                 .or(config.default_model.clone())
                 .unwrap_or_else(|| "ollama/llama3".to_string());
 
-            engine::run_summarize_loop(cli.files, config, &model_str, cli.debug).await?;
+            let file_prompt = cli
+                .prompt_file
+                .map(|f| std::fs::read_to_string(&f))
+                .transpose()?;
+
+            let final_prompt = file_prompt
+                .into_iter()
+                .chain(cli.prompt)
+                .reduce(|a, b| format!("{}\n\n{}", a, b))
+                .unwrap_or_else(|| "Please summarize the following text comprehensively.".to_string());
+
+            engine::run_summarize_loop(cli.files, config, &model_str, cli.debug, &final_prompt).await?;
         }
     }
 

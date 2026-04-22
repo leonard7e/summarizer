@@ -4,7 +4,6 @@ use std::path::PathBuf;
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
 pub struct Config {
     pub default_model: Option<String>,
-    pub instruction: Option<String>,
     #[serde(default)]
     pub providers: ProvidersConfig,
 }
@@ -88,7 +87,6 @@ mod tests {
     fn test_config_defaults() {
         let config = Config::default();
         assert!(config.default_model.is_none());
-        assert!(config.instruction.is_none());
     }
 
     #[test]
