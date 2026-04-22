@@ -1,9 +1,32 @@
 use crate::config::Config;
-use crate::file::{self, FileData, ProcessedFile};
+use crate::file::{self, FileData, FileType, ProcessedFile};
 use crate::provider::{ModelId, create_provider};
 use anyhow::{Result, anyhow};
 use std::ops::Div;
 use std::path::PathBuf;
+
+fn build_prompt(instruction: &str, files: &[ProcessedFile], previous_result: Option<&str>) -> String {
+    let mut prompt = instruction.to_string();
+    if let Some(prev) = previous_result {
+        prompt.push_str("\n\n--- Bisheriges Ergebnis ---\n");
+        prompt.push_str(prev);
+    }
+    for file in files {
+        match &file.data {
+            FileData::Text(content) => {
+                let encoding = match &file.metadata.file_type {
+                    FileType::Text { encoding } => encoding,
+                };
+                prompt.push_str(&format!(
+                    "\n\n--- Datei: {} (Encoding: {}) ---\n",
+                    file.metadata.file_name, encoding
+                ));
+                prompt.push_str(content);
+            }
+        }
+    }
+    prompt
+}
 
 pub async fn run_summarize_loop(
     files: Vec<PathBuf>,
@@ -108,14 +131,8 @@ pub async fn run_summarize_loop(
             // Show percentage of completion
             eprint!("{}% ", (batch_idx * 100).div(batches.len()));
 
-            let new_result = provider
-                .complete(
-                    instruction,
-                    &current_batch,
-                    previous_result.as_deref(),
-                    &model_id.model,
-                )
-                .await?;
+            let prompt = build_prompt(instruction, &current_batch, previous_result.as_deref());
+            let new_result = provider.complete(&prompt, &model_id.model).await?;
             previous_result = Some(new_result);
         }
     }

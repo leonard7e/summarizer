@@ -1,5 +1,4 @@
 use super::LlmProvider;
-use crate::file::{FileData, FileType, ProcessedFile};
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use reqwest::Client;
@@ -63,34 +62,7 @@ struct GeminiError {
 
 #[async_trait]
 impl LlmProvider for GeminiProvider {
-    async fn complete(
-        &self,
-        prompt: &str,
-        files: &[ProcessedFile],
-        previous_result: Option<&str>,
-        model: &str,
-    ) -> Result<String> {
-        let mut full_prompt = prompt.to_string();
-        if let Some(prev) = previous_result {
-            full_prompt.push_str("\n\n--- Bisheriges Ergebnis ---\n");
-            full_prompt.push_str(prev);
-        }
-
-        for file in files {
-            match &file.data {
-                FileData::Text(content) => {
-                    let encoding = match &file.metadata.file_type {
-                        FileType::Text { encoding } => encoding,
-                    };
-                    full_prompt.push_str(&format!(
-                        "\n\n--- Datei: {} (Encoding: {}) ---\n",
-                        file.metadata.file_name, encoding
-                    ));
-                    full_prompt.push_str(content);
-                }
-            }
-        }
-
+    async fn complete(&self, prompt: &str, model: &str) -> Result<String> {
         let url = format!(
             "{}/v1beta/models/{}:generateContent?key={}",
             self.base_url, model, self.api_key
@@ -98,7 +70,7 @@ impl LlmProvider for GeminiProvider {
 
         let req_body = GeminiRequest {
             contents: vec![GeminiContent {
-                parts: vec![GeminiPart { text: full_prompt }],
+                parts: vec![GeminiPart { text: prompt.to_string() }],
             }],
         };
 
@@ -207,7 +179,7 @@ mod tests {
             .await;
 
         let result = provider
-            .complete("Prompt", &[], None, "test-model")
+            .complete("Prompt", "test-model")
             .await
             .unwrap();
         assert_eq!(result, "Zusammenfassung");
@@ -237,7 +209,7 @@ mod tests {
             .create_async()
             .await;
 
-        let result = provider.complete("Prompt", &[], None, "test-model").await;
+        let result = provider.complete("Prompt", "test-model").await;
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("Gemini API Error"));

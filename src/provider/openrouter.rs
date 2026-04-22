@@ -1,5 +1,4 @@
 use super::LlmProvider;
-use crate::file::{FileData, FileType, ProcessedFile};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use reqwest::{header, Client};
@@ -72,46 +71,11 @@ struct OpenRouterError {
 
 #[async_trait]
 impl LlmProvider for OpenRouterProvider {
-    async fn complete(
-        &self,
-        prompt: &str,
-        files: &[ProcessedFile],
-        previous_result: Option<&str>,
-        model: &str,
-    ) -> Result<String> {
-        let mut user_content = String::new();
-        if let Some(prev) = previous_result {
-            user_content.push_str("--- Bisheriges Ergebnis ---\n");
-            user_content.push_str(prev);
-            user_content.push_str("\n\n");
-        }
-
-        for file in files {
-            match &file.data {
-                FileData::Text(content) => {
-                    let encoding = match &file.metadata.file_type {
-                        FileType::Text { encoding } => encoding,
-                    };
-                    user_content.push_str(&format!(
-                        "--- Datei: {} (Encoding: {}) ---\n",
-                        file.metadata.file_name, encoding
-                    ));
-                    user_content.push_str(content);
-                    user_content.push_str("\n\n");
-                }
-            }
-        }
-
-        let messages = vec![
-            Message {
-                role: "system",
-                content: prompt,
-            },
-            Message {
-                role: "user",
-                content: &user_content,
-            },
-        ];
+    async fn complete(&self, prompt: &str, model: &str) -> Result<String> {
+        let messages = vec![Message {
+            role: "user",
+            content: prompt,
+        }];
 
         let req_body = OpenRouterRequest { model, messages };
 
@@ -211,7 +175,7 @@ mod tests {
             .create_async()
             .await;
 
-        let result = provider.complete("Prompt", &[], None, "test-model").await.unwrap();
+        let result = provider.complete("Prompt", "test-model").await.unwrap();
         assert_eq!(result, "OpenRouter Zusammenfassung");
         mock.assert_async().await;
     }
@@ -234,7 +198,7 @@ mod tests {
             .create_async()
             .await;
 
-        let result = provider.complete("Prompt", &[], None, "test-model").await;
+        let result = provider.complete("Prompt", "test-model").await;
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("OpenRouter API Error"));

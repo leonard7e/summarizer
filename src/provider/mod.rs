@@ -1,5 +1,4 @@
 use crate::config::Config;
-use crate::file::ProcessedFile;
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 
@@ -32,13 +31,7 @@ impl ModelId {
 
 #[async_trait]
 pub trait LlmProvider {
-    async fn complete(
-        &self,
-        prompt: &str,
-        files: &[ProcessedFile],
-        previous_result: Option<&str>,
-        model: &str,
-    ) -> Result<String>;
+    async fn complete(&self, prompt: &str, model: &str) -> Result<String>;
 
     async fn list_models(&self) -> Result<Vec<String>>;
 

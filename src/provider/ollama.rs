@@ -1,5 +1,4 @@
 use super::LlmProvider;
-use crate::file::{FileData, FileType, ProcessedFile};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
 use reqwest::Client;
@@ -41,37 +40,10 @@ struct OllamaResponse {
 
 #[async_trait]
 impl LlmProvider for OllamaProvider {
-    async fn complete(
-        &self,
-        prompt: &str,
-        files: &[ProcessedFile],
-        previous_result: Option<&str>,
-        model: &str,
-    ) -> Result<String> {
-        let mut full_prompt = prompt.to_string();
-        if let Some(prev) = previous_result {
-            full_prompt.push_str("\n\n--- Bisheriges Ergebnis ---\n");
-            full_prompt.push_str(prev);
-        }
-
-        for file in files {
-            match &file.data {
-                FileData::Text(content) => {
-                    let encoding = match &file.metadata.file_type {
-                        FileType::Text { encoding } => encoding,
-                    };
-                    full_prompt.push_str(&format!(
-                        "\n\n--- Datei: {} (Encoding: {}) ---\n",
-                        file.metadata.file_name, encoding
-                    ));
-                    full_prompt.push_str(content);
-                }
-            }
-        }
-
+    async fn complete(&self, prompt: &str, model: &str) -> Result<String> {
         let req_body = OllamaRequest {
             model,
-            prompt: full_prompt,
+            prompt: prompt.to_string(),
             stream: false,
             options: OllamaOptions {
                 num_ctx: self.num_ctx,
@@ -131,7 +103,7 @@ mod tests {
             .create_async()
             .await;
 
-        let result = provider.complete("Prompt", &[], None, "test-model").await.unwrap();
+        let result = provider.complete("Prompt", "test-model").await.unwrap();
         assert_eq!(result, "Ollama Zusammenfassung");
         mock.assert_async().await;
     }
@@ -149,7 +121,7 @@ mod tests {
             .create_async()
             .await;
 
-        let result = provider.complete("Prompt", &[], None, "test-model").await;
+        let result = provider.complete("Prompt", "test-model").await;
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("Ollama API Error"));
