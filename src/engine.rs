@@ -34,7 +34,11 @@ fn compute_file_budget(
         .saturating_mul(CHARS_PER_TOKEN)
 }
 
-fn build_prompt(instruction: &str, files: &[ProcessedFile], previous_result: Option<&str>) -> String {
+fn build_prompt(
+    instruction: &str,
+    files: &[ProcessedFile],
+    previous_result: Option<&str>,
+) -> String {
     let mut prompt = instruction.to_string();
     if let Some(prev) = previous_result {
         prompt.push_str("\n\n--- Bisheriges Ergebnis ---\n");
@@ -91,12 +95,8 @@ pub async fn run_summarize_loop(
     // Budget for the *first* batch: previous_result is None yet, but we
     // conservatively assume the output may grow up to max_output_tokens chars,
     // so later batches (with a real previous_result) will automatically shrink.
-    let initial_file_budget = compute_file_budget(
-        api_limit,
-        config.max_output_tokens,
-        instruction,
-        None,
-    );
+    let initial_file_budget =
+        compute_file_budget(api_limit, config.max_output_tokens, instruction, None);
 
     // 1. Convert list of files into list of batches using an iterator.
     //    We use the initial budget here; the per-batch budget is re-evaluated
