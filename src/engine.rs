@@ -84,11 +84,8 @@ pub async fn run_summarize_loop(
     let api_limit = provider.get_context_limit(&model_id.model).await?;
 
     if debug {
-        eprintln!(
-            "Abfrage des Kontext-Limits für Modell '{}'...",
-            model_id.model
-        );
         eprintln!("Context Window: {} tokens", api_limit);
+        eprintln!("Max output token: {} tokens", config.max_output_tokens);
         eprintln!("------------------");
     }
 
