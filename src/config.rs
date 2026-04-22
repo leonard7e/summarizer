@@ -1,11 +1,30 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
-#[derive(Debug, Serialize, Deserialize, Default, Clone)]
+#[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
     pub default_model: Option<String>,
+    /// How many tokens to reserve for the model's output response.
+    /// The remaining context window is available for input (instruction +
+    /// previous result + file contents). Defaults to 2048.
+    #[serde(default = "default_max_output_tokens")]
+    pub max_output_tokens: usize,
     #[serde(default)]
     pub providers: ProvidersConfig,
+}
+
+fn default_max_output_tokens() -> usize {
+    2048
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            default_model: None,
+            max_output_tokens: default_max_output_tokens(),
+            providers: ProvidersConfig::default(),
+        }
+    }
 }
 
 #[derive(Debug, Serialize, Deserialize, Default, Clone)]
@@ -95,6 +114,7 @@ mod tests {
     fn test_config_defaults() {
         let config = Config::default();
         assert!(config.default_model.is_none());
+        assert_eq!(config.max_output_tokens, 2048);
     }
 
     #[test]

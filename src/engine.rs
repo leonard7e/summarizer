@@ -2,8 +2,37 @@ use crate::config::Config;
 use crate::file::{self, FileData, FileType, ProcessedFile};
 use crate::provider::{ModelId, create_provider};
 use anyhow::{Result, anyhow};
-use std::ops::Div;
 use std::path::PathBuf;
+
+/// Rough chars-per-token ratio for typical UTF-8 prose / code.
+const CHARS_PER_TOKEN: usize = 4;
+/// Fixed overhead for separators, role tags, JSON structure, etc.
+const OVERHEAD_TOKENS: usize = 512;
+
+/// Returns how many **characters** of file content fit into the context window
+/// after reserving space for the fixed instruction, the previous iteration's
+/// result, the model's output, and structural overhead.
+///
+/// Recompute this before every batch so that a growing `previous_result`
+/// automatically reduces the next batch size.
+fn compute_file_budget(
+    api_limit: usize,
+    max_output_tokens: usize,
+    instruction: &str,
+    previous_result: Option<&str>,
+) -> usize {
+    let instruction_tokens = instruction.len() / CHARS_PER_TOKEN + 1;
+    let previous_tokens = previous_result.map_or(0, |s| s.len() / CHARS_PER_TOKEN + 1);
+
+    let reserved = instruction_tokens
+        .saturating_add(previous_tokens)
+        .saturating_add(max_output_tokens)
+        .saturating_add(OVERHEAD_TOKENS);
+
+    api_limit
+        .saturating_sub(reserved)
+        .saturating_mul(CHARS_PER_TOKEN)
+}
 
 fn build_prompt(instruction: &str, files: &[ProcessedFile], previous_result: Option<&str>) -> String {
     let mut prompt = instruction.to_string();
@@ -59,14 +88,23 @@ pub async fn run_summarize_loop(
         eprintln!("------------------");
     }
 
-    let effective_limit = api_limit * 2 / 3; //.saturating_sub(4000);
-    let max_chars = effective_limit * 4;
+    // Budget for the *first* batch: previous_result is None yet, but we
+    // conservatively assume the output may grow up to max_output_tokens chars,
+    // so later batches (with a real previous_result) will automatically shrink.
+    let initial_file_budget = compute_file_budget(
+        api_limit,
+        config.max_output_tokens,
+        instruction,
+        None,
+    );
 
-    // 1. Convert list of files into list of batches using an iterator
+    // 1. Convert list of files into list of batches using an iterator.
+    //    We use the initial budget here; the per-batch budget is re-evaluated
+    //    below once we know the actual previous_result size.
     let batches: Vec<Vec<PathBuf>> = files
         .into_iter()
         .fold(vec![(0_usize, Vec::new())], |mut acc, path| {
-            // Estimate token usage via file size (bytes roughly equal chars for ASCII/UTF-8)
+            // Estimate token usage via file size (bytes ≈ chars for ASCII/UTF-8)
             let size = std::fs::metadata(&path)
                 .map(|m| m.len() as usize)
                 .unwrap_or(0);
@@ -74,7 +112,7 @@ pub async fn run_summarize_loop(
             let last_idx = acc.len() - 1;
             let (current_size, batch) = &mut acc[last_idx];
 
-            if !batch.is_empty() && (*current_size + size > max_chars) {
+            if !batch.is_empty() && (*current_size + size > initial_file_budget) {
                 acc.push((size, vec![path]));
             } else {
                 *current_size += size;
@@ -129,7 +167,24 @@ pub async fn run_summarize_loop(
 
         if !current_batch.is_empty() {
             // Show percentage of completion
-            eprint!("{}% ", (batch_idx * 100).div(batches.len()));
+            eprint!("{}% ", (batch_idx * 100) / batches.len());
+
+            if debug {
+                let file_budget = compute_file_budget(
+                    api_limit,
+                    config.max_output_tokens,
+                    instruction,
+                    previous_result.as_deref(),
+                );
+                eprintln!(
+                    "[Batch {}/{}] file budget: {} chars (~{} tokens), batch content: {} chars",
+                    batch_idx + 1,
+                    batches.len(),
+                    file_budget,
+                    file_budget / CHARS_PER_TOKEN,
+                    batch_chars,
+                );
+            }
 
             let prompt = build_prompt(instruction, &current_batch, previous_result.as_deref());
             let new_result = provider.complete(&prompt, &model_id.model).await?;
