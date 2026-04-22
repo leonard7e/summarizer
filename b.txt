@@ -1,0 +1,1 @@
+He decided to use Rust because of its performance and safety guarantees. The tool would process files sequentially.

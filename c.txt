@@ -1,0 +1,1 @@
+Finally, he wrote a beautiful CLI using clap, and testing was a breeze. Everyone was happy.
