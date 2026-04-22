@@ -1,12 +1,12 @@
 use crate::config::Config;
 use crate::file::ProcessedFile;
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 
 pub mod gemini;
 pub mod ollama;
-pub mod openrouter;
 pub mod openai_compatible;
+pub mod openrouter;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelId {
@@ -18,7 +18,10 @@ impl ModelId {
     pub fn parse(s: &str) -> Result<Self> {
         let parts: Vec<&str> = s.splitn(2, '/').collect();
         if parts.len() != 2 {
-            return Err(anyhow!("Invalid model format. Expected 'provider/model_id', got '{}'", s));
+            return Err(anyhow!(
+                "Invalid model format. Expected 'provider/model_id', got '{}'",
+                s
+            ));
         }
         Ok(Self {
             provider: parts[0].to_lowercase(),

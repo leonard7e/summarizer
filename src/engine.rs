@@ -1,10 +1,17 @@
 use crate::config::Config;
 use crate::file::{self, FileData, ProcessedFile};
-use crate::provider::{create_provider, ModelId};
-use anyhow::{anyhow, Result};
+use crate::provider::{ModelId, create_provider};
+use anyhow::{Result, anyhow};
+use std::ops::Div;
 use std::path::PathBuf;
 
-pub async fn run_summarize_loop(files: Vec<PathBuf>, config: Config, model_str: &str, debug: bool, instruction: &str) -> Result<()> {
+pub async fn run_summarize_loop(
+    files: Vec<PathBuf>,
+    config: Config,
+    model_str: &str,
+    debug: bool,
+    instruction: &str,
+) -> Result<()> {
     if files.is_empty() {
         return Err(anyhow!("No files provided."));
     }
@@ -18,25 +25,29 @@ pub async fn run_summarize_loop(files: Vec<PathBuf>, config: Config, model_str: 
         eprintln!("Model:    {}", model_id.model);
     }
 
-    eprintln!("Abfrage des Kontext-Limits für Modell '{}'...", model_id.model);
     let api_limit = provider.get_context_limit(&model_id.model).await?;
-    
+
     if debug {
+        eprintln!(
+            "Abfrage des Kontext-Limits für Modell '{}'...",
+            model_id.model
+        );
         eprintln!("Context Window: {} tokens", api_limit);
         eprintln!("------------------");
     }
 
-    let effective_limit = api_limit.saturating_sub(4000);
+    let effective_limit = api_limit * 2 / 3; //.saturating_sub(4000);
     let max_chars = effective_limit * 4;
-
 
     // 1. Convert list of files into list of batches using an iterator
     let batches: Vec<Vec<PathBuf>> = files
         .into_iter()
         .fold(vec![(0_usize, Vec::new())], |mut acc, path| {
             // Estimate token usage via file size (bytes roughly equal chars for ASCII/UTF-8)
-            let size = std::fs::metadata(&path).map(|m| m.len() as usize).unwrap_or(0);
-            
+            let size = std::fs::metadata(&path)
+                .map(|m| m.len() as usize)
+                .unwrap_or(0);
+
             let last_idx = acc.len() - 1;
             let (current_size, batch) = &mut acc[last_idx];
 
@@ -78,7 +89,12 @@ pub async fn run_summarize_loop(files: Vec<PathBuf>, config: Config, model_str: 
                     batch_chars += file_chars;
 
                     if debug {
-                        eprintln!("[{}/{}] Adding to batch: {}", processed_count, total_files, file_path.display());
+                        eprintln!(
+                            "[{}/{}] Adding to batch: {}",
+                            processed_count,
+                            total_files,
+                            file_path.display()
+                        );
                     }
                     current_batch.push(processed);
                 }
@@ -89,15 +105,8 @@ pub async fn run_summarize_loop(files: Vec<PathBuf>, config: Config, model_str: 
         }
 
         if !current_batch.is_empty() {
-            let is_last_batch = batch_idx == batches.len() - 1;
-
-            if is_last_batch {
-                eprintln!("Sende finalen Batch mit {} Dateien...", current_batch.len());
-            } else if current_batch.len() == 1 && batch_chars > max_chars {
-                eprintln!("Einzeldatei überschreitet Kontext-Limit. Sende sofort...");
-            } else {
-                eprintln!("Batch-Limit erreicht. Sende Request für {} Dateien...", current_batch.len());
-            }
+            // Show percentage of completion
+            eprint!("{}% ", (batch_idx * 100).div(batches.len()));
 
             let new_result = provider
                 .complete(

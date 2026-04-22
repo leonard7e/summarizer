@@ -1,6 +1,6 @@
 use super::LlmProvider;
 use crate::file::{FileData, FileType, ProcessedFile};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
@@ -102,12 +102,7 @@ impl LlmProvider for GeminiProvider {
             }],
         };
 
-        let res = self
-            .client
-            .post(&url)
-            .json(&req_body)
-            .send()
-            .await?;
+        let res = self.client.post(&url).json(&req_body).send().await?;
 
         let status = res.status();
         let resp: GeminiResponse = res.json().await?;
@@ -144,13 +139,10 @@ impl LlmProvider for GeminiProvider {
             name: String,
         }
 
-        let url = format!(
-            "{}/v1beta/models?key={}",
-            self.base_url, self.api_key
-        );
+        let url = format!("{}/v1beta/models?key={}", self.base_url, self.api_key);
 
         let res: ModelsResponse = self.client.get(&url).send().await?.json().await?;
-        
+
         Ok(res
             .models
             .into_iter()
@@ -192,10 +184,14 @@ mod tests {
         let provider = GeminiProvider::with_base_url("test_key".to_string(), url);
 
         let mock = server
-            .mock("POST", "/v1beta/models/test-model:generateContent?key=test_key")
+            .mock(
+                "POST",
+                "/v1beta/models/test-model:generateContent?key=test_key",
+            )
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{
+            .with_body(
+                r#"{
                 "candidates": [
                     {
                         "content": {
@@ -205,11 +201,15 @@ mod tests {
                         }
                     }
                 ]
-            }"#)
+            }"#,
+            )
             .create_async()
             .await;
 
-        let result = provider.complete("Prompt", &[], None, "test-model").await.unwrap();
+        let result = provider
+            .complete("Prompt", &[], None, "test-model")
+            .await
+            .unwrap();
         assert_eq!(result, "Zusammenfassung");
         mock.assert_async().await;
     }
@@ -221,14 +221,19 @@ mod tests {
         let provider = GeminiProvider::with_base_url("test_key".to_string(), url);
 
         let mock = server
-            .mock("POST", "/v1beta/models/test-model:generateContent?key=test_key")
+            .mock(
+                "POST",
+                "/v1beta/models/test-model:generateContent?key=test_key",
+            )
             .with_status(400)
             .with_header("content-type", "application/json")
-            .with_body(r#"{
+            .with_body(
+                r#"{
                 "error": {
                     "message": "Invalid request"
                 }
-            }"#)
+            }"#,
+            )
             .create_async()
             .await;
 
