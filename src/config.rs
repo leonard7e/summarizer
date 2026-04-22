@@ -13,6 +13,8 @@ pub struct ProvidersConfig {
     pub gemini: Option<GeminiConfig>,
     pub openrouter: Option<OpenRouterConfig>,
     pub ollama: Option<OllamaConfig>,
+    #[serde(rename = "openai-compatible")]
+    pub openai_compatible: Option<OpenAiCompatibleConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -23,6 +25,12 @@ pub struct GeminiConfig {
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OpenRouterConfig {
     pub api_key: String,
+}
+
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct OpenAiCompatibleConfig {
+    pub api_key: String,
+    pub base_url: String,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]

@@ -6,6 +6,7 @@ use async_trait::async_trait;
 pub mod gemini;
 pub mod ollama;
 pub mod openrouter;
+pub mod openai_compatible;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelId {
@@ -62,6 +63,17 @@ pub fn create_provider(provider_name: &str, config: &Config) -> Result<Box<dyn L
                 .api_key
                 .clone();
             Ok(Box::new(openrouter::OpenRouterProvider::new(api_key)))
+        }
+        "openai-compatible" => {
+            let conf = config
+                .providers
+                .openai_compatible
+                .as_ref()
+                .ok_or_else(|| anyhow!("OpenAI Compatible provider not configured"))?;
+            Ok(Box::new(openai_compatible::OpenAiCompatibleProvider::new(
+                conf.api_key.clone(),
+                conf.base_url.clone(),
+            )))
         }
         "ollama" => {
             let config_ollama = config.providers.ollama.as_ref();
