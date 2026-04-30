@@ -1,1 +1,0 @@
-This is the first part of the story. Once upon a time, there was a developer who wanted to build a summarizer tool.
