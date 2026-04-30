@@ -25,16 +25,16 @@ pub async fn get_all_models(config: &Config) -> Vec<String> {
 }
 
 pub async fn select_default_model(config: &mut Config) -> Result<()> {
-    eprintln!("Abfrage der verfügbaren Modelle...");
+    eprintln!("Fetching available models...");
     
     let all_models = get_all_models(config).await;
 
     if all_models.is_empty() {
-        return Err(anyhow!("Keine Modelle gefunden. Bitte konfiguriere mindestens einen Provider korrekt."));
+        return Err(anyhow!("No models found. Please configure at least one provider correctly."));
     }
 
     let selection = Select::new()
-        .with_prompt("Wähle das Standard-Modell aus")
+        .with_prompt("Select the default model")
         .items(&all_models)
         .default(0)
         .interact()?;
@@ -42,7 +42,7 @@ pub async fn select_default_model(config: &mut Config) -> Result<()> {
     config.default_model = Some(all_models[selection].clone());
     config.save()?;
 
-    println!("Standard-Modell auf '{}' gesetzt und gespeichert.", config.default_model.as_ref().unwrap());
+    println!("Default model set to '{}' and saved.", config.default_model.as_ref().unwrap());
     Ok(())
 }
 
@@ -51,27 +51,27 @@ pub async fn run_initialization() -> Result<()> {
     if config_path.exists() {
         let proceed = Confirm::new()
             .with_prompt(format!(
-                "Konfigurationsdatei '{}' existiert bereits. Überschreiben?",
+                "Configuration file '{}' already exists. Overwrite?",
                 config_path.display()
             ))
             .default(false)
             .interact()?;
         
         if !proceed {
-            println!("Initialisierung abgebrochen.");
+            println!("Initialization aborted.");
             return Ok(());
         }
     }
 
-    println!("--- Initialisierung von summarizer ---");
+    println!("--- Summarizer Initialization ---");
 
     let openrouter_key: String = Input::new()
-        .with_prompt("OpenRouter API Key (leer lassen zum Überspringen)")
+        .with_prompt("OpenRouter API Key (leave empty to skip)")
         .allow_empty(true)
         .interact_text()?;
 
     let gemini_key: String = Input::new()
-        .with_prompt("Gemini API Key (leer lassen zum Überspringen)")
+        .with_prompt("Gemini API Key (leave empty to skip)")
         .allow_empty(true)
         .interact_text()?;
 
@@ -98,6 +98,6 @@ pub async fn run_initialization() -> Result<()> {
     // Now select default model
     select_default_model(&mut config).await?;
 
-    println!("Initialisierung erfolgreich abgeschlossen.");
+    println!("Initialization completed successfully.");
     Ok(())
 }
