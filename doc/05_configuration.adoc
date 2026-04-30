@@ -1,0 +1,143 @@
+[[configuration]]
+== Configuration
+
+=== File Location
+
+The configuration file is stored at the platform-specific user configuration directory:
+
+[cols="1,2", options="header"]
+|===
+| Platform | Path
+
+| Linux
+| `~/.config/summarizer/config.yaml`
+
+| macOS
+| `~/Library/Application Support/summarizer/config.yaml`
+
+| Windows
+| `%APPDATA%\summarizer\config.yaml`
+|===
+
+The file is created automatically with default values when `summarizer` runs for the first time, or when you run `summarizer init`.
+
+[IMPORTANT]
+====
+On Unix systems the file is saved with permissions `0600` (readable only by the owner) because it may contain API keys.
+====
+
+=== Complete Example
+
+[source,yaml]
+----
+default_model: ollama/llama3
+max_output_tokens: 2048
+
+providers:
+  gemini:
+    api_key: "AIza..."
+
+  openrouter:
+    api_key: "sk-or-..."
+
+  ollama:
+    host: "http://localhost:11434"
+    num_ctx: 4096
+
+  openai-compatible:
+    api_key: "sk-..."
+    base_url: "http://localhost:8080/v1"
+----
+
+=== Field Reference
+
+==== Top-Level Fields
+
+[cols="1,1,1,3", options="header"]
+|===
+| Field | Type | Default | Description
+
+| `default_model`
+| string (optional)
+| —
+| The model used when `--model` is not specified on the command line. Format: `provider/model_id`.
+
+| `max_output_tokens`
+| integer
+| `2048`
+| Number of tokens reserved for the model's output in each request. The remaining context window is available for the instruction, previous result, and file content.
+|===
+
+==== `providers.gemini`
+
+[cols="1,1,1,3", options="header"]
+|===
+| Field | Type | Default | Description
+
+| `api_key`
+| string
+| —
+| Google Gemini API key. Obtain one at https://aistudio.google.com/[Google AI Studio].
+|===
+
+==== `providers.openrouter`
+
+[cols="1,1,1,3", options="header"]
+|===
+| Field | Type | Default | Description
+
+| `api_key`
+| string
+| —
+| OpenRouter API key. Obtain one at https://openrouter.ai/[openrouter.ai].
+|===
+
+==== `providers.ollama`
+
+[cols="1,1,1,3", options="header"]
+|===
+| Field | Type | Default | Description
+
+| `host`
+| string
+| `http://localhost:11434`
+| Base URL of the Ollama HTTP API.
+
+| `num_ctx`
+| integer
+| `4096`
+| Context window size to request from Ollama. Larger values consume more VRAM but allow more content per batch.
+|===
+
+==== `providers.openai-compatible`
+
+[cols="1,1,1,3", options="header"]
+|===
+| Field | Type | Default | Description
+
+| `api_key`
+| string
+| —
+| API key for the endpoint. May be an arbitrary string for endpoints that do not enforce authentication.
+
+| `base_url`
+| string
+| —
+| Base URL of the OpenAI-compatible API (e.g. `http://localhost:8080/v1`).
+|===
+
+=== Managing the Configuration
+
+Use the built-in subcommands to manage the configuration interactively without editing the YAML file directly:
+
+[source,bash]
+----
+# Full setup wizard (creates or overwrites the file)
+summarizer init
+
+# Change only the default model
+summarizer default-model
+
+# Check which models are currently reachable
+summarizer list-models
+----

@@ -1,0 +1,47 @@
+[[introduction]]
+== Introduction
+
+`summarizer` is a command-line tool that sends the contents of one or more text files to a large language model (LLM) and prints the model's response.
+
+=== Motivation
+
+Most LLMs have a finite _context window_ — the maximum number of tokens (roughly: characters) that can be processed in a single request.
+When you want to summarize a large body of text — such as a long document, a collection of log files, or the concatenated output of many reports — the content often exceeds that limit.
+
+`summarizer` solves this with an *iterative batching* strategy:
+
+1. Files are grouped into batches that fit within the model's context window.
+2. Each batch is sent to the model together with the result of the previous batch.
+3. The final output is the model's response to the last batch, which has seen all preceding content through the rolling context.
+
+This makes it possible to summarize an arbitrarily large file set with a single command.
+
+=== Use Cases
+
+* Summarizing collections of meeting transcripts or notes
+* Condensing large log files or error reports
+* Extracting key points from research papers or articles
+* Running custom analysis prompts over many files in one shot
+
+=== Supported Providers
+
+[cols="1,2,1", options="header"]
+|===
+| Provider | Description | Requires
+
+| Google Gemini
+| Google's Gemini models via the Gemini API
+| API key
+
+| OpenRouter
+| Aggregator with access to hundreds of models
+| API key
+
+| Ollama
+| Run open models locally
+| Local Ollama installation
+
+| OpenAI-compatible
+| Any server exposing an OpenAI-compatible API (vLLM, LM Studio, etc.)
+| API key + base URL
+|===

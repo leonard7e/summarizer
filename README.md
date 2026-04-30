@@ -1,0 +1,74 @@
+# summarizer
+
+A command-line tool that iteratively summarizes multiple text files using large language models (LLMs).
+
+When the combined content of your files exceeds a model's context window, `summarizer` automatically splits them into batches and feeds each batch to the model along with the result of the previous iteration — building up a coherent, rolling summary.
+
+## Features
+
+- **Iterative batching** — handles arbitrarily large file sets by chaining batches
+- **Multiple providers** — Google Gemini, OpenRouter, Ollama (local), and any OpenAI-compatible API
+- **Custom prompts** — pass an instruction via `--prompt` or a prompt file via `--prompt-file`
+- **Model selection** — specify any model at runtime with `--model provider/model_id`
+- **Interactive setup** — `summarizer init` walks you through configuration
+
+## Quick Start
+
+### 1. Build
+
+```bash
+cargo build --release
+# Binary: ./target/release/summarizer
+```
+
+### 2. Configure
+
+```bash
+summarizer init
+```
+
+This walks you through entering your API keys and selecting a default model.
+
+### 3. Summarize
+
+```bash
+# Summarize a single file
+summarizer report.txt
+
+# Summarize multiple files with a custom prompt
+summarizer -p "List the key action items." meeting1.txt meeting2.txt meeting3.txt
+
+# Use a model different from the default
+summarizer --model ollama/llama3 notes.txt
+```
+
+## Documentation
+
+Full documentation is available in [`doc/`](doc/summarizer.adoc).
+
+To build a single-page HTML:
+
+```bash
+asciidoctor doc/summarizer.adoc -D doc/out/
+```
+
+To build a PDF:
+
+```bash
+asciidoctor-pdf doc/summarizer.adoc -D doc/out/
+```
+
+Install the tools once with: `gem install asciidoctor asciidoctor-pdf`
+
+## Supported Providers
+
+| Provider | Model format | Requires |
+|---|---|---|
+| Google Gemini | `google/gemini-1.5-flash` | API key |
+| OpenRouter | `openrouter/<model-id>` | API key |
+| Ollama | `ollama/<model-name>` | Local Ollama instance |
+| OpenAI-compatible | `openai-compatible/<model>` | API key + base URL |
+
+## Configuration
+
+The configuration file is stored at `~/.config/summarizer/config.yaml` (Linux/macOS) and is created automatically on first run. See [`doc/05_configuration.adoc`](doc/05_configuration.adoc) for the full field reference.

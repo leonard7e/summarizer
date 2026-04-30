@@ -1,0 +1,46 @@
+[[installation]]
+== Installation
+
+=== Prerequisites
+
+* *Rust toolchain* — Edition 2024 (stable ≥ 1.85).
+  Install via https://rustup.rs[rustup].
+* *OpenSSL* (Linux) — required by `reqwest` for HTTPS connections. +
+  On Debian/Ubuntu: `sudo apt install pkg-config libssl-dev` +
+  On Fedora/RHEL: `sudo dnf install openssl-devel`
+* *Ollama* (optional) — only needed if you want to use local models.
+  See https://ollama.com[ollama.com].
+
+=== Build from Source
+
+[source,bash]
+----
+git clone <repository-url>
+cd summarizer
+cargo build --release
+----
+
+The compiled binary will be at `./target/release/summarizer`.
+
+=== Install to `$PATH`
+
+To install the binary into Cargo's bin directory (usually `~/.cargo/bin`, which is on `$PATH` after a standard rustup setup):
+
+[source,bash]
+----
+cargo install --path .
+----
+
+=== Documentation Tooling (Optional)
+
+To build the documentation from the `doc/` directory into HTML or PDF, install the AsciiDoc toolchain:
+
+[source,bash]
+----
+gem install asciidoctor asciidoctor-pdf
+----
+
+[NOTE]
+====
+Ruby must be available on your system. On most Linux distributions it is pre-installed or available via the package manager (`sudo apt install ruby` / `sudo dnf install ruby`).
+====

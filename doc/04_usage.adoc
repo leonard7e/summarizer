@@ -1,0 +1,135 @@
+[[usage]]
+== Usage
+
+=== Synopsis
+
+[source]
+----
+summarizer [OPTIONS] [FILES]...
+summarizer <SUBCOMMAND>
+----
+
+=== Arguments
+
+[cols="1,3", options="header"]
+|===
+| Argument | Description
+
+| `[FILES]...`
+| One or more text files to summarize. Passed as positional arguments.
+|===
+
+=== Options
+
+[cols="1,1,3", options="header"]
+|===
+| Short | Long | Description
+
+| `-p`
+| `--prompt <TEXT>`
+| Instruction text to prepend to the summarization request.
+  If omitted, a default prompt is used: _"Please summarize the following text comprehensively."_
+
+| `-f`
+| `--prompt-file <PATH>`
+| Path to a file containing the instruction text.
+  If both `--prompt` and `--prompt-file` are given, the file content comes first, followed by the inline prompt.
+
+| `-m`
+| `--model <PROVIDER/MODEL>`
+| Model to use, in the format `provider/model_id` (e.g. `google/gemini-1.5-flash`).
+  Overrides the `default_model` from the configuration file.
+
+|
+| `--debug`
+| Print debug information to standard error: provider, model, context window size, batch sizes, and per-file progress.
+
+| `-h`
+| `--help`
+| Print help information.
+
+| `-V`
+| `--version`
+| Print version information.
+|===
+
+=== Subcommands
+
+[cols="1,3", options="header"]
+|===
+| Subcommand | Description
+
+| `init`
+| Run the interactive setup wizard. Collects API keys and lets you choose a default model. Creates or overwrites `~/.config/summarizer/config.yaml`.
+
+| `list-models`
+| Query all configured providers and print the available model IDs, prefixed with `provider/`.
+
+| `default-model`
+| Interactively select a new default model from the list of all available models and save it to the configuration file.
+|===
+
+=== Model Format
+
+Models are always specified as `provider/model_id`:
+
+[cols="1,2", options="header"]
+|===
+| Example | Meaning
+
+| `ollama/llama3`
+| The model named `llama3` served by a local Ollama instance
+
+| `google/gemini-1.5-flash`
+| Gemini 1.5 Flash via the Google Gemini API
+
+| `openrouter/meta-llama/llama-3-8b-instruct`
+| A model accessed through OpenRouter (the part after `openrouter/` is the OpenRouter model ID)
+
+| `openai-compatible/my-model`
+| A model served by a custom OpenAI-compatible endpoint
+|===
+
+=== Examples
+
+.Summarize a single file with the default prompt
+[source,bash]
+----
+summarizer report.txt
+----
+
+.Use a custom prompt
+[source,bash]
+----
+summarizer -p "List all decisions made in bullet points." minutes.txt
+----
+
+.Read the prompt from a file
+[source,bash]
+----
+summarizer -f prompts/analysis.txt data.txt
+----
+
+.Combine a prompt file and an inline prompt
+[source,bash]
+----
+summarizer -f prompts/base.txt -p "Focus on security issues." log.txt
+----
+
+.Use a specific model
+[source,bash]
+----
+summarizer --model openrouter/anthropic/claude-3-haiku document.txt
+----
+
+.Summarize many files, redirect output
+[source,bash]
+----
+summarizer *.txt > combined_summary.txt
+----
+
+.Debug mode to inspect batching and token budget
+[source,bash]
+----
+summarizer --debug *.txt
+----
