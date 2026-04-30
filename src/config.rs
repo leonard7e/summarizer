@@ -68,6 +68,15 @@ fn default_ollama_num_ctx() -> usize {
     4096
 }
 
+impl Default for OllamaConfig {
+    fn default() -> Self {
+        Self {
+            host: default_ollama_host(),
+            num_ctx: default_ollama_num_ctx(),
+        }
+    }
+}
+
 impl Config {
     pub fn load() -> anyhow::Result<Self> {
         let config_path = Self::path()?;

@@ -13,7 +13,7 @@ pub struct OllamaProvider {
 impl OllamaProvider {
     pub fn new(host: String, num_ctx: usize) -> Self {
         Self {
-            host,
+            host: host.trim_end_matches('/').to_string(),
             num_ctx,
             client: Client::new(),
         }
@@ -50,7 +50,7 @@ impl LlmProvider for OllamaProvider {
             },
         };
 
-        let url = format!("{}/api/generate", self.host.trim_end_matches('/'));
+        let url = format!("{}/api/generate", self.host);
 
         let res = self.client.post(&url).json(&req_body).send().await?;
 
@@ -74,7 +74,7 @@ impl LlmProvider for OllamaProvider {
             name: String,
         }
 
-        let url = format!("{}/api/tags", self.host.trim_end_matches('/'));
+        let url = format!("{}/api/tags", self.host);
         let res: ModelsResponse = self.client.get(&url).send().await?.json().await?;
 
         Ok(res.models.into_iter().map(|m| m.name).collect())

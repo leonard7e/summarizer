@@ -14,25 +14,27 @@ use config::Config;
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
-    if let Some(Commands::Init) = &cli.command {
-        return setup::run_initialization().await;
-    }
-
-    let mut config = Config::load()?;
-
-    match &cli.command {
-        Some(Commands::ListModels) => {
-            println!("Available Models:");
-            let all_models = setup::get_all_models(&config).await;
-            for model in all_models {
-                println!("- {}", model);
+    match cli.command {
+        Some(Commands::Init) => setup::run_initialization().await,
+        Some(cmd) => {
+            let mut config = Config::load()?;
+            match cmd {
+                Commands::ListModels => {
+                    println!("Available Models:");
+                    let all_models = setup::get_all_models(&config).await;
+                    for model in all_models {
+                        println!("- {}", model);
+                    }
+                }
+                Commands::DefaultModel => {
+                    setup::select_default_model(&mut config).await?;
+                }
+                Commands::Init => unreachable!(), // Handled above
             }
-        }
-        Some(Commands::Init) => unreachable!(),
-        Some(Commands::DefaultModel) => {
-            setup::select_default_model(&mut config).await?;
+            Ok(())
         }
         None => {
+            let config = Config::load()?;
             if cli.files.is_empty() {
                 println!("No files provided. Use `summarizer --help` for usage.");
                 return Ok(());
@@ -57,9 +59,7 @@ async fn main() -> Result<()> {
                 });
 
             engine::run_summarize_loop(cli.files, config, &model_str, cli.debug, &final_prompt)
-                .await?;
+                .await
         }
     }
-
-    Ok(())
 }

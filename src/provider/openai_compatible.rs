@@ -82,6 +82,11 @@ impl LlmProvider for OpenAiCompatibleProvider {
             .await?;
 
         let status = res.status();
+        if !status.is_success() {
+            let error_text = res.text().await.unwrap_or_default();
+            return Err(anyhow!("OpenAI API HTTP Error ({}): {}", status, error_text));
+        }
+
         let resp: ChatCompletionResponse = res.json().await?;
 
         if let Some(err) = resp.error {
@@ -144,20 +149,12 @@ impl LlmProvider for OpenAiCompatibleProvider {
 
         let res_json: Result<ModelsResponse, _> = res.json().await;
         
-        if let Ok(models_resp) = res_json {
-            let model_info = models_resp.data.into_iter().find(|m| m.id == model);
-            if let Some(info) = model_info {
-                if let Some(ctx) = info.context_length {
-                    return Ok(ctx);
-                }
-                if let Some(ctx) = info.max_position_embeddings {
-                    return Ok(ctx);
-                }
-            }
-        }
-        
-        // Default fallback if context limit is not provided in response
-        Ok(8192)
+        let limit = res_json
+            .ok()
+            .and_then(|resp| resp.data.into_iter().find(|m| m.id == model))
+            .and_then(|info| info.context_length.or(info.max_position_embeddings));
+
+        Ok(limit.unwrap_or(crate::provider::DEFAULT_CONTEXT_LIMIT))
     }
 }
 
@@ -214,7 +211,7 @@ mod tests {
         let result = provider.complete("Prompt", "test-model").await;
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("OpenAI API Error"));
+        assert!(err_msg.contains("OpenAI API HTTP Error"));
         assert!(err_msg.contains("401"));
         mock.assert_async().await;
     }

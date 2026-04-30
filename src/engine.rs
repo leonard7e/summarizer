@@ -45,18 +45,13 @@ fn build_prompt(
         prompt.push_str(prev);
     }
     for file in files {
-        match &file.data {
-            FileData::Text(content) => {
-                let encoding = match &file.metadata.file_type {
-                    FileType::Text { encoding } => encoding,
-                };
-                prompt.push_str(&format!(
-                    "\n\n--- Datei: {} (Encoding: {}) ---\n",
-                    file.metadata.file_name, encoding
-                ));
-                prompt.push_str(content);
-            }
-        }
+        let FileData::Text(content) = &file.data;
+        let FileType::Text { encoding } = &file.metadata.file_type;
+        prompt.push_str(&format!(
+            "\n\n--- Datei: {} (Encoding: {}) ---\n",
+            file.metadata.file_name, encoding
+        ));
+        prompt.push_str(content);
     }
     prompt
 }
@@ -106,8 +101,7 @@ pub async fn run_summarize_loop(
                 .map(|m| m.len() as usize)
                 .unwrap_or(0);
 
-            let last_idx = acc.len() - 1;
-            let (current_size, batch) = &mut acc[last_idx];
+            let (current_size, batch) = acc.last_mut().unwrap();
 
             if !batch.is_empty() && (*current_size + size > initial_file_budget) {
                 acc.push((size, vec![path]));
@@ -141,9 +135,8 @@ pub async fn run_summarize_loop(
 
             match file::read_file(&file_path).await {
                 Ok(processed) => {
-                    let file_chars = match &processed.data {
-                        FileData::Text(c) => c.len(),
-                    };
+                    let FileData::Text(c) = &processed.data;
+                    let file_chars = c.len();
                     batch_chars += file_chars;
 
                     if debug {

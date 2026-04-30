@@ -24,7 +24,7 @@ impl GeminiProvider {
         Self {
             api_key,
             client: Client::new(),
-            base_url,
+            base_url: base_url.trim_end_matches('/').to_string(),
         }
     }
 }
@@ -77,6 +77,11 @@ impl LlmProvider for GeminiProvider {
         let res = self.client.post(&url).json(&req_body).send().await?;
 
         let status = res.status();
+        if !status.is_success() {
+            let error_text = res.text().await.unwrap_or_default();
+            return Err(anyhow!("Gemini API HTTP Error ({}): {}", status, error_text));
+        }
+
         let resp: GeminiResponse = res.json().await?;
 
         if let Some(err) = resp.error {
@@ -140,7 +145,7 @@ impl LlmProvider for GeminiProvider {
         }
 
         let info: ModelInfo = res.json().await?;
-        Ok(info.input_token_limit.unwrap_or(32768))
+        Ok(info.input_token_limit.unwrap_or(crate::provider::DEFAULT_CONTEXT_LIMIT))
     }
 }
 
@@ -212,7 +217,7 @@ mod tests {
         let result = provider.complete("Prompt", "test-model").await;
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
-        assert!(err_msg.contains("Gemini API Error"));
+        assert!(err_msg.contains("Gemini API HTTP Error"));
         assert!(err_msg.contains("Invalid request"));
         mock.assert_async().await;
     }

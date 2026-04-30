@@ -4,35 +4,18 @@ use anyhow::{anyhow, Result};
 use dialoguer::{Confirm, Input, Select};
 
 pub async fn get_all_models(config: &Config) -> Vec<String> {
+    let providers: &[(&str, bool)] = &[
+        ("google", config.providers.gemini.is_some()),
+        ("openrouter", config.providers.openrouter.is_some()),
+        ("ollama", true),
+    ];
+
     let mut all_models = Vec::new();
-
-    // Gemini
-    if config.providers.gemini.is_some() {
-        if let Ok(p) = provider::create_provider("google", config) {
+    for &(name, enabled) in providers {
+        if !enabled { continue; }
+        if let Ok(p) = provider::create_provider(name, config) {
             if let Ok(models) = p.list_models().await {
-                for m in models {
-                    all_models.push(format!("google/{}", m));
-                }
-            }
-        }
-    }
-
-    // OpenRouter
-    if config.providers.openrouter.is_some() {
-        if let Ok(p) = provider::create_provider("openrouter", config) {
-            if let Ok(models) = p.list_models().await {
-                for m in models {
-                    all_models.push(format!("openrouter/{}", m));
-                }
-            }
-        }
-    }
-
-    // Ollama
-    if let Ok(p) = provider::create_provider("ollama", config) {
-        if let Ok(models) = p.list_models().await {
-            for m in models {
-                all_models.push(format!("ollama/{}", m));
+                all_models.extend(models.into_iter().map(|m| format!("{}/{}", name, m)));
             }
         }
     }
@@ -56,11 +39,10 @@ pub async fn select_default_model(config: &mut Config) -> Result<()> {
         .default(0)
         .interact()?;
 
-    let selected_model = all_models[selection].clone();
-    config.default_model = Some(selected_model.clone());
+    config.default_model = Some(all_models[selection].clone());
     config.save()?;
 
-    println!("Standard-Modell auf '{}' gesetzt und gespeichert.", selected_model);
+    println!("Standard-Modell auf '{}' gesetzt und gespeichert.", config.default_model.as_ref().unwrap());
     Ok(())
 }
 
