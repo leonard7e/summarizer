@@ -1,6 +1,7 @@
 use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 
+/// The main configuration structure for the summarizer application.
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct Config {
     pub default_model: Option<String>,
@@ -78,6 +79,7 @@ impl Default for OllamaConfig {
 }
 
 impl Config {
+    /// Loads the configuration from the user's config directory, creating a default one if it doesn't exist.
     pub fn load() -> anyhow::Result<Self> {
         let config_path = Self::path()?;
         if !config_path.exists() {

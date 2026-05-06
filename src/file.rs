@@ -15,11 +15,14 @@ pub struct FileMetadata {
     pub file_type: FileType,
 }
 
+/// Represents a file that has been successfully read and parsed into memory.
 pub struct ProcessedFile {
     pub metadata: FileMetadata,
     pub data: FileData,
 }
 
+/// Reads a file from disk and wraps it in a ProcessedFile struct. 
+/// Currently only supports UTF-8 text.
 pub async fn read_file(path: &Path) -> Result<ProcessedFile> {
     let file_name = path
         .file_name()

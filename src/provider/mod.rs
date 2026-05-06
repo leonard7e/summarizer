@@ -6,6 +6,7 @@ pub mod gemini;
 pub mod ollama;
 pub mod openai_compatible;
 
+/// Represents a parsed model identifier combining the provider name and the specific model.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelId {
     pub provider: String,
@@ -13,6 +14,7 @@ pub struct ModelId {
 }
 
 impl ModelId {
+    /// Parses a model string in the format 'provider/model_id'.
     pub fn parse(s: &str) -> Result<Self> {
         let (provider, model) = s
             .split_once('/')
@@ -27,6 +29,7 @@ impl ModelId {
 
 pub const DEFAULT_CONTEXT_LIMIT: usize = 8192;
 
+/// Common trait implemented by all language model providers to standardize interactions.
 #[async_trait]
 pub trait LlmProvider {
     async fn complete(&self, prompt: &str, model: &str) -> Result<String>;
@@ -36,6 +39,7 @@ pub trait LlmProvider {
     async fn get_context_limit(&self, model: &str) -> Result<usize>;
 }
 
+/// Factory function to instantiate the appropriate provider based on its name and configuration.
 pub fn create_provider(provider_name: &str, config: &Config) -> Result<Box<dyn LlmProvider>> {
     match provider_name {
         "google" | "gemini" => {

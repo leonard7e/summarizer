@@ -41,14 +41,14 @@ fn build_prompt(
 ) -> String {
     let mut prompt = instruction.to_string();
     if let Some(prev) = previous_result {
-        prompt.push_str("\n\n--- Bisheriges Ergebnis ---\n");
+        prompt.push_str("\n\n--- Previous Result ---\n");
         prompt.push_str(prev);
     }
     for file in files {
         let FileData::Text(content) = &file.data;
         let FileType::Text { encoding } = &file.metadata.file_type;
         prompt.push_str(&format!(
-            "\n\n--- Datei: {} (Encoding: {}) ---\n",
+            "\n\n--- File: {} (Encoding: {}) ---\n",
             file.metadata.file_name, encoding
         ));
         prompt.push_str(content);
@@ -56,6 +56,9 @@ fn build_prompt(
     prompt
 }
 
+/// Core execution loop for summarization. Processes files in batches
+/// based on the model's context limit, passing the previous batch's
+/// result into the next prompt to produce a rolling summary.
 pub async fn run_summarize_loop(
     files: Vec<PathBuf>,
     config: Config,

@@ -14,6 +14,7 @@ use config::Config;
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
+    // Handle subcommands or execute the main summarization flow if no subcommand is provided.
     match cli.command {
         Some(Commands::Init) => setup::run_initialization().await,
         Some(cmd) => {
@@ -34,6 +35,7 @@ async fn main() -> Result<()> {
             Ok(())
         }
         None => {
+            // Determine which model to use: CLI argument overrides the default from config.
             let config = Config::load()?;
             if cli.files.is_empty() {
                 println!("No files provided. Use `summarizer --help` for usage.");
@@ -50,6 +52,7 @@ async fn main() -> Result<()> {
                 .map(|f| std::fs::read_to_string(&f))
                 .transpose()?;
 
+            // Combine prompt from file and CLI argument, falling back to a default instruction if neither is provided.
             let final_prompt = file_prompt
                 .into_iter()
                 .chain(cli.prompt)

@@ -3,6 +3,7 @@ use crate::provider;
 use anyhow::{anyhow, Result};
 use dialoguer::{Confirm, Input, Select};
 
+/// Aggregates a list of all available models from enabled providers.
 pub async fn get_all_models(config: &Config) -> Vec<String> {
     let providers: &[(&str, bool)] = &[
         ("google", config.providers.gemini.is_some()),
@@ -24,6 +25,7 @@ pub async fn get_all_models(config: &Config) -> Vec<String> {
     all_models
 }
 
+/// Prompts the user interactively to select a default model and saves it to config.
 pub async fn select_default_model(config: &mut Config) -> Result<()> {
     eprintln!("Fetching available models...");
     
@@ -46,6 +48,7 @@ pub async fn select_default_model(config: &mut Config) -> Result<()> {
     Ok(())
 }
 
+/// Interactive wizard to set up the configuration file and provider API keys.
 pub async fn run_initialization() -> Result<()> {
     let config_path = Config::path()?;
     if config_path.exists() {
