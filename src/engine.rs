@@ -6,7 +6,7 @@ use std::path::PathBuf;
 
 /// Rough chars-per-token ratio for typical UTF-8 prose / code.
 const CHARS_PER_TOKEN: usize = 4;
-/// Fixed overhead for separators, role tags, JSON structure, etc.
+/// Minimal overhead for separators, role tags, JSON structure, etc.
 const OVERHEAD_TOKENS: usize = 512;
 
 /// Returns how many **characters** of file content fit into the context window
@@ -23,12 +23,12 @@ fn compute_file_budget(
 ) -> usize {
     let instruction_tokens = instruction.len() / CHARS_PER_TOKEN + 1;
     let previous_tokens = previous_result.map_or(0, |s| s.len() / CHARS_PER_TOKEN + 1);
+    let overhead_tokens = (max_output_tokens / 16).min(OVERHEAD_TOKENS);
 
-    // let thinking_tokens = api_limit
     let reserved = instruction_tokens
         .saturating_add(previous_tokens)
         .saturating_add(max_output_tokens)
-        .saturating_add(OVERHEAD_TOKENS);
+        .saturating_add(overhead_tokens);
 
     api_limit
         .saturating_sub(reserved)
