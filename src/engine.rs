@@ -24,6 +24,7 @@ fn compute_file_budget(
     let instruction_tokens = instruction.len() / CHARS_PER_TOKEN + 1;
     let previous_tokens = previous_result.map_or(0, |s| s.len() / CHARS_PER_TOKEN + 1);
 
+    // let thinking_tokens = api_limit
     let reserved = instruction_tokens
         .saturating_add(previous_tokens)
         .saturating_add(max_output_tokens)
@@ -39,20 +40,49 @@ fn build_prompt(
     files: &[ProcessedFile],
     previous_result: Option<&str>,
 ) -> String {
-    let mut prompt = instruction.to_string();
+    let mut prompt = String::new();
+
+    // 1. System Instruction
+    prompt.push_str("<system_instruction>\n");
+    prompt.push_str(instruction);
+    prompt.push_str("\n</system_instruction>\n\n");
+
+    // 2. Iterative Task Definition
+    prompt.push_str("<task>\n");
+    prompt.push_str("You are in an iterative process. Your task is to update the 'previous_result' using the information found in 'new_files'.\n");
+    prompt.push_str("- Do NOT change the requested output format defined in \"system_instruction\".\n");
+    prompt.push_str("- Do NOT add conversational filler text (e.g. \"Here is the summary\").\n");
+    prompt.push_str("- Merge intelligently without losing previous critical data.\n");
+    prompt.push_str("</task>\n\n");
+
+    // 3. Previous Result
+    prompt.push_str("<previous_result>\n");
     if let Some(prev) = previous_result {
-        prompt.push_str("\n\n--- Previous Result ---\n");
         prompt.push_str(prev);
+    } else {
+        prompt.push_str("None yet, this is the first batch.");
     }
+    prompt.push_str("\n</previous_result>\n\n");
+
+    // 4. New Files
+    prompt.push_str("<new_files>\n");
     for file in files {
         let FileData::Text(content) = &file.data;
         let FileType::Text { encoding } = &file.metadata.file_type;
         prompt.push_str(&format!(
-            "\n\n--- File: {} (Encoding: {}) ---\n",
+            "<file path=\"{}\" encoding=\"{}\">\n",
             file.metadata.file_name, encoding
         ));
         prompt.push_str(content);
+        prompt.push_str("\n</file>\n");
     }
+    prompt.push_str("</new_files>\n\n");
+
+    // 5. Final Reminder (Sandwich)
+    prompt.push_str("<reminder>\n");
+    prompt.push_str("Merge the provided new files into the previous result. Strictly adhere to the original instruction provided in \"system_instruction\" at the very beginning of this prompt.\n");
+    prompt.push_str("</reminder>\n");
+
     prompt
 }
 
