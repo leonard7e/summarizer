@@ -73,6 +73,10 @@ Install the tools once with: `gem install asciidoctor asciidoctor-pdf`
 
 The configuration file is stored at `~/.config/summarizer/config.yaml` (Linux/macOS) and is created automatically on first run. See [`doc/05_configuration.adoc`](doc/05_configuration.adoc) for the full field reference.
 
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
+
 ## Disclaimer & Regulatory Notice
 
 **Usage at Your Own Risk:** This software is provided "as is," without warranty of any kind. The author is not liable for any damages, data loss, or costs arising from the use of this tool.
