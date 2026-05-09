@@ -37,7 +37,31 @@ async fn main() -> Result<()> {
         None => {
             // Determine which model to use: CLI argument overrides the default from config.
             let config = Config::load()?;
-            if cli.files.is_empty() {
+            let mut files = cli.files;
+
+            let _stdin_temp_file = {
+                use std::io::{IsTerminal, Read, Write};
+                if files.is_empty() && !std::io::stdin().is_terminal() {
+                    let mut buffer = String::new();
+                    std::io::stdin().read_to_string(&mut buffer)?;
+
+                    Some(buffer)
+                        .filter(|b| !b.is_empty())
+                        .map(|b| -> Result<_> {
+                            let mut temp_file = tempfile::Builder::new()
+                                .prefix("summarizer_stdin_")
+                                .suffix(".txt")
+                                .tempfile()?;
+                            temp_file.write_all(b.as_bytes())?;
+                            files.push(temp_file.path().to_path_buf());
+                            Ok(temp_file)
+                        })
+                        .transpose()?
+                } else {
+                    None
+                }
+            };
+            if files.is_empty() {
                 println!("No files provided. Use `summarizer --help` for usage.");
                 return Ok(());
             }
@@ -61,7 +85,7 @@ async fn main() -> Result<()> {
                     "Please summarize the following text comprehensively.".to_string()
                 });
 
-            engine::run_summarize_loop(cli.files, config, &model_str, cli.debug, &final_prompt)
+            engine::run_summarize_loop(files, config, &model_str, cli.debug, &final_prompt)
                 .await
         }
     }
