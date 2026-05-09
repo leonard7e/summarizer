@@ -88,20 +88,12 @@ impl LlmProvider for GeminiProvider {
             return Err(anyhow!("Gemini API Error ({}): {}", status, err.message));
         }
 
-        let candidates = resp
+        let text = resp
             .candidates
-            .ok_or_else(|| anyhow!("No candidates in Gemini response"))?;
-        let first = candidates
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow!("Empty candidates list"))?;
-        let text = first
-            .content
-            .parts
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow!("Empty parts list"))?
-            .text;
+            .and_then(|c| c.into_iter().next())
+            .and_then(|c| c.content.parts.into_iter().next())
+            .map(|p| p.text)
+            .ok_or_else(|| anyhow!("Invalid or empty Gemini response"))?;
 
         Ok(text)
     }

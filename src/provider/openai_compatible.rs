@@ -93,15 +93,13 @@ impl LlmProvider for OpenAiCompatibleProvider {
             return Err(anyhow!("OpenAI API Error ({}): {}", status, err.message));
         }
 
-        let choices = resp
+        let content = resp
             .choices
+            .and_then(|c| c.into_iter().next())
+            .map(|choice| choice.message.content)
             .ok_or_else(|| anyhow!("No choices in API response"))?;
-        let first = choices
-            .into_iter()
-            .next()
-            .ok_or_else(|| anyhow!("Empty choices list"))?;
 
-        Ok(first.message.content)
+        Ok(content)
     }
 
     async fn list_models(&self) -> Result<Vec<String>> {
@@ -147,12 +145,14 @@ impl LlmProvider for OpenAiCompatibleProvider {
             return Ok(8192);
         }
 
-        let res_json: Result<ModelsResponse, _> = res.json().await;
-        
-        let limit = res_json
-            .ok()
-            .and_then(|resp| resp.data.into_iter().find(|m| m.id == model))
-            .and_then(|info| info.context_length.or(info.max_position_embeddings));
+        let limit = if let Ok(resp) = res.json::<ModelsResponse>().await {
+            resp.data
+                .into_iter()
+                .find(|m| m.id == model)
+                .and_then(|info| info.context_length.or(info.max_position_embeddings))
+        } else {
+            None
+        };
 
         Ok(limit.unwrap_or(crate::provider::DEFAULT_CONTEXT_LIMIT))
     }

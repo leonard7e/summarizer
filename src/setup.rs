@@ -1,24 +1,36 @@
-use crate::config::{Config, GeminiConfig, OllamaConfig, OpenRouterConfig};
+use crate::config::{Config, GeminiConfig, OllamaConfig, OpenAiCompatibleConfig, OpenRouterConfig};
 use crate::provider;
 use anyhow::{anyhow, Result};
 use dialoguer::{Confirm, Input, Select};
 
 /// Aggregates a list of all available models from enabled providers.
 pub async fn get_all_models(config: &Config) -> Vec<String> {
-    let providers: &[(&str, bool)] = &[
+    let static_providers = vec![
         ("google", config.providers.gemini.is_some()),
         ("openrouter", config.providers.openrouter.is_some()),
-        ("ollama", true),
+        ("ollama", config.providers.ollama.is_some()),
     ];
 
+    let custom_providers = config
+        .providers
+        .openai_compatible
+        .iter()
+        .map(|c| (c.name.as_str(), true));
+
+    let active_provider_names = static_providers
+        .into_iter()
+        .chain(custom_providers)
+        .filter_map(|(name, enabled)| enabled.then_some(name));
+
     let mut all_models = Vec::new();
-    for &(name, enabled) in providers {
-        if !enabled { continue; }
-        if let Ok(p) = provider::create_provider(name, config) {
-            if let Ok(models) = p.list_models().await {
-                all_models.extend(models.into_iter().map(|m| format!("{}/{}", name, m)));
-            }
-        }
+    for name in active_provider_names {
+        let Ok(p) = provider::create_provider(name, config) else {
+            continue;
+        };
+        let Ok(models) = p.list_models().await else {
+            continue;
+        };
+        all_models.extend(models.into_iter().map(|m| format!("{}/{}", name, m)));
     }
 
     all_models.sort();
@@ -94,6 +106,35 @@ pub async fn run_initialization() -> Result<()> {
     }
 
     config.providers.ollama = Some(OllamaConfig { host: ollama_host, num_ctx: 4096 });
+
+    loop {
+        let add_openai: bool = Confirm::new()
+            .with_prompt("Add an OpenAI-compatible provider (e.g. Mistral, Groq, local)?")
+            .default(false)
+            .interact()?;
+        
+        if !add_openai {
+            break;
+        }
+
+        let name: String = Input::new()
+            .with_prompt("Provider Name (e.g. 'mistral', 'groq')")
+            .interact_text()?;
+            
+        let api_key: String = Input::new()
+            .with_prompt("API Key")
+            .interact_text()?;
+            
+        let base_url: String = Input::new()
+            .with_prompt("Base URL")
+            .interact_text()?;
+
+        config.providers.openai_compatible.push(OpenAiCompatibleConfig {
+            name,
+            api_key,
+            base_url,
+        });
+    }
 
     // Save initial keys so select_default_model can use them
     config.save()?;

@@ -166,7 +166,7 @@ pub async fn run_summarize_loop(
                 continue;
             }
 
-            match file::read_file(&file_path).await {
+            match file::read_file(file_path).await {
                 Ok(processed) => {
                     let FileData::Text(c) = &processed.data;
                     let file_chars = c.len();

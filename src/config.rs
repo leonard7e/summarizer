@@ -33,8 +33,8 @@ pub struct ProvidersConfig {
     pub gemini: Option<GeminiConfig>,
     pub openrouter: Option<OpenRouterConfig>,
     pub ollama: Option<OllamaConfig>,
-    #[serde(rename = "openai-compatible")]
-    pub openai_compatible: Option<OpenAiCompatibleConfig>,
+    #[serde(rename = "openai-compatible", default)]
+    pub openai_compatible: Vec<OpenAiCompatibleConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
@@ -49,6 +49,7 @@ pub struct OpenRouterConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OpenAiCompatibleConfig {
+    pub name: String,
     pub api_key: String,
     pub base_url: String,
 }

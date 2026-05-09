@@ -60,27 +60,25 @@ pub fn create_provider(provider_name: &str, config: &Config) -> Result<Box<dyn L
                 .ok_or_else(|| anyhow!("OpenRouter provider not configured"))?
                 .api_key
                 .clone();
-            Ok(Box::new(openai_compatible::OpenAiCompatibleProvider::new(
+                Ok(Box::new(openai_compatible::OpenAiCompatibleProvider::new(
                 api_key,
-                "https://openrouter.ai/api/v1".to_string(),
-            )))
-        }
-        "openai-compatible" => {
-            let conf = config
-                .providers
-                .openai_compatible
-                .as_ref()
-                .ok_or_else(|| anyhow!("OpenAI Compatible provider not configured"))?;
-            Ok(Box::new(openai_compatible::OpenAiCompatibleProvider::new(
-                conf.api_key.clone(),
-                conf.base_url.clone(),
-            )))
+                    "https://openrouter.ai/api/v1".to_string(),
+                )))
         }
         "ollama" => {
-            let config_ollama = config.providers.ollama.clone().unwrap_or_default();
-            Ok(Box::new(ollama::OllamaProvider::new(config_ollama.host, config_ollama.num_ctx)))
+            let conf = config.providers.ollama.clone().unwrap_or_default();
+            Ok(Box::new(ollama::OllamaProvider::new(conf.host, conf.num_ctx)))
         }
-        _ => Err(anyhow!("Unknown provider: {}", provider_name)),
+        name => {
+            if let Some(conf) = config.providers.openai_compatible.iter().find(|c| c.name == name) {
+                Ok(Box::new(openai_compatible::OpenAiCompatibleProvider::new(
+                    conf.api_key.clone(),
+                    conf.base_url.clone(),
+                )))
+            } else {
+                Err(anyhow!("Unknown provider: {}", provider_name))
+            }
+        }
     }
 }
 
