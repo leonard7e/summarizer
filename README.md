@@ -72,3 +72,20 @@ Install the tools once with: `gem install asciidoctor asciidoctor-pdf`
 ## Configuration
 
 The configuration file is stored at `~/.config/summarizer/config.yaml` (Linux/macOS) and is created automatically on first run. See [`doc/05_configuration.adoc`](doc/05_configuration.adoc) for the full field reference.
+
+## License
+
+Licensed under the [Apache License, Version 2.0](LICENSE).
+
+## Disclaimer & Regulatory Notice
+
+**Usage at Your Own Risk:** This software is provided "as is," without warranty of any kind. The author is not liable for any damages, data loss, or costs arising from the use of this tool.
+
+**Data Privacy (GDPR/DSGVO):**
+*   This tool is a client-side utility. The author does not collect, store, or process any of your data.
+*   By using cloud providers (e.g., Google Gemini, OpenRouter), you are transmitting your file contents to third-party servers. 
+*   **You (the user) are the sole data controller.** It is your responsibility to ensure that you have the legal right to process and transmit the data (especially personal or sensitive information) according to local laws like the GDPR.
+
+**AI Compliance:**
+*   This tool uses Large Language Models. Outputs may be inaccurate, biased, or hallucinated. Always verify critical information.
+*   The user is responsible for complying with the Terms of Service of the respective AI providers used through this tool.
