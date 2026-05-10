@@ -14,11 +14,11 @@ pub struct ModelId {
 }
 
 impl ModelId {
-    /// Parses a model string in the format 'provider/model_id'.
+    /// Parses a model string in the format 'provider:model_id'.
     pub fn parse(s: &str) -> Result<Self> {
         let (provider, model) = s
-            .split_once('/')
-            .ok_or_else(|| anyhow!("Invalid model format. Expected 'provider/model_id', got '{}'", s))?;
+            .split_once(':')
+            .ok_or_else(|| anyhow!("Invalid model format. Expected 'provider:model_id', got '{}'", s))?;
         
         Ok(Self {
             provider: provider.to_lowercase(),
