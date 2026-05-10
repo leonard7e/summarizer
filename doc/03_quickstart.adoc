@@ -28,7 +28,7 @@ The wizard will ask for:
 * OpenRouter API key — press Enter to skip
 * Gemini API key — press Enter to skip
 * Ollama host — accept the default `http://localhost:11434`
-* Default model — select `ollama/llama3` from the list
+* Default model — select `ollama:llama3` from the list
 
 The configuration is saved to `~/.config/summarizer/config.yaml`.
 

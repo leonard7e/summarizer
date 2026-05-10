@@ -19,7 +19,7 @@ pub struct Cli {
     #[arg(short = 'f', long)]
     pub prompt_file: Option<PathBuf>,
 
-    /// Model to use (e.g. google/gemini-1.5-flash)
+    /// Model to use (e.g. google:gemini-1.5-flash)
     #[arg(short, long)]
     pub model: Option<String>,
 

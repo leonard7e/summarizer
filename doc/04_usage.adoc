@@ -36,8 +36,8 @@ summarizer <SUBCOMMAND>
   If both `--prompt` and `--prompt-file` are given, the file content comes first, followed by the inline prompt.
 
 | `-m`
-| `--model <PROVIDER/MODEL>`
-| Model to use, in the format `provider/model_id` (e.g. `google/gemini-1.5-flash`).
+| `--model <PROVIDER:MODEL>`
+| Model to use, in the format `provider:model_id` (e.g. `google:gemini-1.5-flash`).
   Overrides the `default_model` from the configuration file.
 
 |
@@ -63,7 +63,7 @@ summarizer <SUBCOMMAND>
 | Run the interactive setup wizard. Collects API keys and lets you choose a default model. Creates or overwrites `~/.config/summarizer/config.yaml`.
 
 | `list-models`
-| Query all configured providers and print the available model IDs, prefixed with `provider/`.
+| Query all configured providers and print the available model IDs, prefixed with `provider:`.
 
 | `default-model`
 | Interactively select a new default model from the list of all available models and save it to the configuration file.
@@ -71,22 +71,22 @@ summarizer <SUBCOMMAND>
 
 === Model Format
 
-Models are always specified as `provider/model_id`:
+Models are always specified as `provider:model_id`:
 
 [cols="1,2", options="header"]
 |===
 | Example | Meaning
 
-| `ollama/llama3`
+| `ollama:llama3`
 | The model named `llama3` served by a local Ollama instance
 
-| `google/gemini-1.5-flash`
+| `google:gemini-1.5-flash`
 | Gemini 1.5 Flash via the Google Gemini API
 
-| `openrouter/meta-llama/llama-3-8b-instruct`
-| A model accessed through OpenRouter (the part after `openrouter/` is the OpenRouter model ID)
+| `openrouter:meta-llama/llama-3-8b-instruct`
+| A model accessed through OpenRouter (the part after `openrouter:` is the OpenRouter model ID)
 
-| `openai-compatible/my-model`
+| `openai-compatible:my-model`
 | A model served by a custom OpenAI-compatible endpoint
 |===
 
@@ -119,7 +119,7 @@ summarizer -f prompts/base.txt -p "Focus on security issues." log.txt
 .Use a specific model
 [source,bash]
 ----
-summarizer --model openrouter/anthropic/claude-3-haiku document.txt
+summarizer --model openrouter:anthropic/claude-3-haiku document.txt
 ----
 
 .Summarize many files, redirect output

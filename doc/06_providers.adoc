@@ -2,7 +2,7 @@
 == Providers
 
 A _provider_ is a backend that `summarizer` uses to send prompts and receive completions.
-Providers are selected by the prefix in the model identifier (`provider/model_id`).
+Providers are selected by the prefix in the model identifier (`provider:model_id`).
 
 === Google Gemini
 
@@ -24,15 +24,15 @@ providers:
 
 [source]
 ----
-google/<model-id>
+google:<model-id>
 ----
 
 .Examples
 [source,bash]
 ----
-summarizer --model google/gemini-1.5-flash document.txt
-summarizer --model google/gemini-1.5-pro  document.txt
-summarizer --model google/gemini-2.0-flash document.txt
+summarizer --model google:gemini-1.5-flash document.txt
+summarizer --model google:gemini-1.5-pro  document.txt
+summarizer --model google:gemini-2.0-flash document.txt
 ----
 
 ==== Notes
@@ -62,17 +62,17 @@ providers:
 
 [source]
 ----
-openrouter/<openrouter-model-id>
+openrouter:<openrouter-model-id>
 ----
 
-The model ID after `openrouter/` is the full OpenRouter model identifier, which typically includes the vendor name.
+The model ID after `openrouter:` is the full OpenRouter model identifier, which typically includes the vendor name.
 
 .Examples
 [source,bash]
 ----
-summarizer --model openrouter/anthropic/claude-3-haiku   document.txt
-summarizer --model openrouter/meta-llama/llama-3-8b-instruct document.txt
-summarizer --model openrouter/mistralai/mistral-7b-instruct  document.txt
+summarizer --model openrouter:anthropic/claude-3-haiku   document.txt
+summarizer --model openrouter:meta-llama/llama-3-8b-instruct document.txt
+summarizer --model openrouter:mistralai/mistral-7b-instruct  document.txt
 ----
 
 ==== Notes
@@ -109,15 +109,15 @@ providers:
 
 [source]
 ----
-ollama/<model-name>
+ollama:<model-name>
 ----
 
 .Examples
 [source,bash]
 ----
-summarizer --model ollama/llama3       notes.txt
-summarizer --model ollama/mistral      notes.txt
-summarizer --model ollama/phi3:mini    notes.txt
+summarizer --model ollama:llama3       notes.txt
+summarizer --model ollama:mistral      notes.txt
+summarizer --model ollama:phi3:mini    notes.txt
 ----
 
 ==== `num_ctx` — Context Window
@@ -152,15 +152,15 @@ providers:
 
 [source]
 ----
-openai-compatible/<model-id>
+openai-compatible:<model-id>
 ----
 
-The model ID after `openai-compatible/` must match the model name as the server expects it.
+The model ID after `openai-compatible:` must match the model name as the server expects it.
 
 .Examples
 [source,bash]
 ----
-summarizer --model openai-compatible/my-local-model document.txt
+summarizer --model openai-compatible:my-local-model document.txt
 ----
 
 ==== Notes

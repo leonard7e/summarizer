@@ -30,7 +30,7 @@ pub async fn get_all_models(config: &Config) -> Vec<String> {
         let Ok(models) = p.list_models().await else {
             continue;
         };
-        all_models.extend(models.into_iter().map(|m| format!("{}/{}", name, m)));
+        all_models.extend(models.into_iter().map(|m| format!("{}:{}", name, m)));
     }
 
     all_models.sort();

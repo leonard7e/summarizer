@@ -88,7 +88,7 @@ mod tests {
 
     #[test]
     fn test_model_id_parse() {
-        let id = ModelId::parse("google/gemini-1.5-flash").unwrap();
+        let id = ModelId::parse("google:gemini-1.5-flash").unwrap();
         assert_eq!(id.provider, "google");
         assert_eq!(id.model, "gemini-1.5-flash");
 

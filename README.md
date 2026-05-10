@@ -9,7 +9,7 @@ When the combined content of your files exceeds a model's context window, `summa
 - **Iterative batching** — handles arbitrarily large file sets by chaining batches
 - **Multiple providers** — Google Gemini, OpenRouter, Ollama (local), and any OpenAI-compatible API
 - **Custom prompts** — pass an instruction via `--prompt` or a prompt file via `--prompt-file`
-- **Model selection** — specify any model at runtime with `--model provider/model_id`
+- **Model selection** — specify any model at runtime with `--model provider:model_id`
 - **Interactive setup** — `summarizer init` walks you through configuration
 
 ## Quick Start
@@ -39,7 +39,7 @@ summarizer report.txt
 summarizer -p "List the key action items." meeting1.txt meeting2.txt meeting3.txt
 
 # Use a model different from the default
-summarizer --model ollama/llama3 notes.txt
+summarizer --model ollama:llama3 notes.txt
 ```
 
 ## Documentation
@@ -64,10 +64,10 @@ Install the tools once with: `gem install asciidoctor asciidoctor-pdf`
 
 | Provider | Model format | Requires |
 |---|---|---|
-| Google Gemini | `google/gemini-1.5-flash` | API key |
-| OpenRouter | `openrouter/<model-id>` | API key |
-| Ollama | `ollama/<model-name>` | Local Ollama instance |
-| OpenAI-compatible | `openai-compatible/<model>` | API key + base URL |
+| Google Gemini | `google:gemini-1.5-flash` | API key |
+| OpenRouter | `openrouter:<model-id>` | API key |
+| Ollama | `ollama:<model-name>` | Local Ollama instance |
+| OpenAI-compatible | `openai-compatible:<model>` | API key + base URL |
 
 ## Configuration
 

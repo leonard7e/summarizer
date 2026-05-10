@@ -11,7 +11,7 @@ This chapter explains the internal mechanics of `summarizer` — how it splits i
         │
         ▼
   ┌─────────────────┐
-  │  Parse model ID │  "google/gemini-1.5-flash"  →  provider="google", model="gemini-1.5-flash"
+  │  Parse model ID │  "google:gemini-1.5-flash"  →  provider="google", model="gemini-1.5-flash"
   └────────┬────────┘
            │
            ▼
@@ -44,16 +44,16 @@ This chapter explains the internal mechanics of `summarizer` — how it splits i
 
 === Step 1: Model ID Parsing
 
-The model string passed via `--model` (or from `default_model` in the config) is split on the first `/` into a _provider_ name and a _model ID_:
+The model string passed via `--model` (or from `default_model` in the config) is split on the first `:` into a _provider_ name and a _model ID_:
 
 [source]
 ----
-"openrouter/anthropic/claude-3-haiku"
+"openrouter:anthropic/claude-3-haiku"
  ^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^^^
- provider    model (everything after the first '/')
+ provider    model (everything after the first ':')
 ----
 
-An error is returned if no `/` is present.
+An error is returned if no `:` is present.
 
 === Step 2: Context Window Query
 

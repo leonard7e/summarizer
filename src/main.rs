@@ -69,7 +69,7 @@ async fn main() -> Result<()> {
             let model_str = cli
                 .model
                 .or(config.default_model.clone())
-                .unwrap_or_else(|| "ollama/llama3".to_string());
+                .unwrap_or_else(|| "ollama:llama3".to_string());
 
             let file_prompt = cli
                 .prompt_file
