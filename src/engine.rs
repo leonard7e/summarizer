@@ -128,13 +128,13 @@ pub async fn run_summarize_loop(
     //    below once we know the actual previous_result size.
     let batches: Vec<Vec<PathBuf>> = files
         .into_iter()
-        .fold(vec![(0_usize, Vec::new())], |mut acc, path| {
+        .try_fold(vec![(0_usize, Vec::new())], |mut acc, path| -> Result<Vec<(usize, Vec<PathBuf>)>> {
             // Estimate token usage via file size (bytes ≈ chars for ASCII/UTF-8)
             let size = std::fs::metadata(&path)
                 .map(|m| m.len() as usize)
                 .unwrap_or(0);
 
-            let (current_size, batch) = acc.last_mut().unwrap();
+            let (current_size, batch) = acc.last_mut().ok_or_else(|| anyhow!("Batch accumulator is unexpectedly empty"))?;
 
             if !batch.is_empty() && (*current_size + size > initial_file_budget) {
                 acc.push((size, vec![path]));
@@ -142,8 +142,8 @@ pub async fn run_summarize_loop(
                 *current_size += size;
                 batch.push(path);
             }
-            acc
-        })
+            Ok(acc)
+        })?
         .into_iter()
         .map(|(_, batch)| batch)
         .filter(|batch| !batch.is_empty())

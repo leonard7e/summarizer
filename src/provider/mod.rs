@@ -63,7 +63,7 @@ pub fn create_provider(provider_name: &str, config: &Config) -> Result<Box<dyn L
                 Ok(Box::new(openai_compatible::OpenAiCompatibleProvider::new(
                 api_key,
                     "https://openrouter.ai/api/v1".to_string(),
-                )))
+                )?))
         }
         "ollama" => {
             let conf = config.providers.ollama.clone().unwrap_or_default();
@@ -74,7 +74,7 @@ pub fn create_provider(provider_name: &str, config: &Config) -> Result<Box<dyn L
                 Ok(Box::new(openai_compatible::OpenAiCompatibleProvider::new(
                     conf.api_key.clone(),
                     conf.base_url.clone(),
-                )))
+                )?))
             } else {
                 Err(anyhow!("Unknown provider: {}", provider_name))
             }

@@ -10,7 +10,7 @@ pub struct OpenAiCompatibleProvider {
 }
 
 impl OpenAiCompatibleProvider {
-    pub fn new(api_key: String, base_url: String) -> Self {
+    pub fn new(api_key: String, base_url: String) -> Result<Self> {
         let mut headers = header::HeaderMap::new();
         // Some local providers don't strictly require an API key but we send it anyway if present
         let auth_val = if api_key.is_empty() {
@@ -18,14 +18,18 @@ impl OpenAiCompatibleProvider {
         } else {
             format!("Bearer {}", api_key)
         };
-        let mut auth_value = header::HeaderValue::from_str(&auth_val).unwrap();
+        let mut auth_value = header::HeaderValue::from_str(&auth_val)
+            .map_err(|e| anyhow!("Invalid authorization header value: {}", e))?;
         auth_value.set_sensitive(true);
         headers.insert(header::AUTHORIZATION, auth_value);
 
-        Self {
-            client: Client::builder().default_headers(headers).build().unwrap(),
+        Ok(Self {
+            client: Client::builder()
+                .default_headers(headers)
+                .build()
+                .map_err(|e| anyhow!("Failed to build HTTP client: {}", e))?,
             base_url: base_url.trim_end_matches('/').to_string(),
-        }
+        })
     }
 }
 
@@ -167,7 +171,7 @@ mod tests {
     async fn test_openai_compatible_complete() {
         let mut server = Server::new_async().await;
         let url = server.url();
-        let provider = OpenAiCompatibleProvider::new("test_key".to_string(), url.clone());
+        let provider = OpenAiCompatibleProvider::new("test_key".to_string(), url.clone()).unwrap();
 
         let mock = server
             .mock("POST", "/chat/completions")
@@ -194,7 +198,7 @@ mod tests {
     async fn test_openai_compatible_api_error() {
         let mut server = Server::new_async().await;
         let url = server.url();
-        let provider = OpenAiCompatibleProvider::new("test_key".to_string(), url.clone());
+        let provider = OpenAiCompatibleProvider::new("test_key".to_string(), url.clone()).unwrap();
 
         let mock = server
             .mock("POST", "/chat/completions")
@@ -220,7 +224,7 @@ mod tests {
     async fn test_openai_compatible_get_context_limit() {
         let mut server = Server::new_async().await;
         let url = server.url();
-        let provider = OpenAiCompatibleProvider::new("test_key".to_string(), url.clone());
+        let provider = OpenAiCompatibleProvider::new("test_key".to_string(), url.clone()).unwrap();
 
         let mock = server
             .mock("GET", "/models")
@@ -246,7 +250,7 @@ mod tests {
     async fn test_openai_compatible_get_context_limit_fallback() {
         let mut server = Server::new_async().await;
         let url = server.url();
-        let provider = OpenAiCompatibleProvider::new("test_key".to_string(), url.clone());
+        let provider = OpenAiCompatibleProvider::new("test_key".to_string(), url.clone()).unwrap();
 
         let mock = server
             .mock("GET", "/models")
