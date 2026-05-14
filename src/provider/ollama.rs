@@ -62,6 +62,7 @@ impl LlmProvider for OllamaProvider {
                 match part {
                     PromptPart::Text(t) => text.push_str(t),
                     PromptPart::Image { data, .. } => imgs.push(STANDARD.encode(data)),
+                    _ => {} // Ignore audio/video as Ollama doesn't support them natively yet
                 }
                 (text, imgs)
             },
@@ -164,9 +165,17 @@ impl LlmProvider for OllamaProvider {
             .json::<OllamaShowResponse>()
             .await?
             .capabilities
-            .map_or(false, |caps| caps.iter().any(|c| c == "vision"));
+            .is_some_and(|caps| caps.iter().any(|c| c == "vision"));
 
         Ok(supported)
+    }
+
+    async fn supports_audio(&self, _model: &str) -> Result<bool> {
+        Ok(false)
+    }
+
+    async fn supports_video(&self, _model: &str) -> Result<bool> {
+        Ok(false)
     }
 }
 #[cfg(test)]

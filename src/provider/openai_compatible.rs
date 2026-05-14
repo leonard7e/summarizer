@@ -53,6 +53,21 @@ enum OpenAiContentPart {
     Text { text: String },
     #[serde(rename = "image_url")]
     ImageUrl { image_url: OpenAiImageUrl },
+    #[serde(rename = "input_audio")]
+    InputAudio { input_audio: OpenAiInputAudio },
+    #[serde(rename = "video_url")]
+    VideoUrl { video_url: OpenAiVideoUrl },
+}
+
+#[derive(Serialize)]
+struct OpenAiInputAudio {
+    data: String,
+    format: String,
+}
+
+#[derive(Serialize)]
+struct OpenAiVideoUrl {
+    url: String,
 }
 
 #[derive(Serialize)]
@@ -88,6 +103,17 @@ impl LlmProvider for OpenAiCompatibleProvider {
             PromptPart::Text(t) => OpenAiContentPart::Text { text: t.clone() },
             PromptPart::Image { mime_type, data } => OpenAiContentPart::ImageUrl {
                 image_url: OpenAiImageUrl {
+                    url: format!("data:{};base64,{}", mime_type, STANDARD.encode(data)),
+                },
+            },
+            PromptPart::Audio { mime_type, data } => OpenAiContentPart::InputAudio {
+                input_audio: OpenAiInputAudio {
+                    data: STANDARD.encode(data),
+                    format: mime_type.split('/').nth(1).unwrap_or("mp3").to_string(),
+                },
+            },
+            PromptPart::Video { mime_type, data } => OpenAiContentPart::VideoUrl {
+                video_url: OpenAiVideoUrl {
                     url: format!("data:{};base64,{}", mime_type, STANDARD.encode(data)),
                 },
             },
@@ -202,10 +228,6 @@ impl LlmProvider for OpenAiCompatibleProvider {
 
         let url = format!("{}/models", self.base_url);
 
-        // Query /models and inspect input_modalities.
-        // If the endpoint is unavailable or doesn't expose modality data
-        // (e.g. for local/generic providers), we optimistically allow the request —
-        // the user chose the model and knows its capabilities.
         let image_support: Option<bool> = async {
             let resp: ModelsResponse = self
                 .client
@@ -231,6 +253,16 @@ impl LlmProvider for OpenAiCompatibleProvider {
         .await;
 
         Ok(image_support.unwrap_or(true))
+    }
+
+    async fn supports_audio(&self, _model: &str) -> Result<bool> {
+        // Similar optimistic fallback for audio
+        Ok(true) 
+    }
+
+    async fn supports_video(&self, _model: &str) -> Result<bool> {
+        // Similar optimistic fallback for video
+        Ok(true)
     }
 }
 

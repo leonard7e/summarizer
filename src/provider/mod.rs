@@ -30,6 +30,8 @@ impl ModelId {
 pub enum PromptPart {
     Text(String),
     Image { mime_type: String, data: Vec<u8> },
+    Audio { mime_type: String, data: Vec<u8> },
+    Video { mime_type: String, data: Vec<u8> },
 }
 
 pub const DEFAULT_CONTEXT_LIMIT: usize = 8192;
@@ -44,6 +46,8 @@ pub trait LlmProvider {
     async fn get_context_limit(&self, model: &str) -> Result<usize>;
 
     async fn supports_images(&self, model: &str) -> Result<bool>;
+    async fn supports_audio(&self, model: &str) -> Result<bool>;
+    async fn supports_video(&self, model: &str) -> Result<bool>;
 }
 
 /// Factory function to instantiate the appropriate provider based on its name and configuration.

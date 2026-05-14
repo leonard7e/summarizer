@@ -59,10 +59,19 @@ fn estimate_image_tokens(data: &[u8]) -> usize {
 /// Estimates the "character equivalent" size of a file for budgeting purposes.
 /// For text files: byte length (≈ char count for UTF-8).
 /// For images: estimated tokens * CHARS_PER_TOKEN.
+/// For audio/video: duration-based token estimate * CHARS_PER_TOKEN.
 fn estimate_file_cost(processed: &ProcessedFile) -> usize {
     match &processed.data {
         FileData::Text(c) => c.len(),
         FileData::Image(bytes) => estimate_image_tokens(bytes) * CHARS_PER_TOKEN,
+        FileData::Audio(_, duration) => {
+            // Estimate 50 tokens per second for audio
+            ((*duration * 50.0) as usize) * CHARS_PER_TOKEN
+        }
+        FileData::Video(_, duration) => {
+            // Estimate 300 tokens per second for video
+            ((*duration * 300.0) as usize) * CHARS_PER_TOKEN
+        }
     }
 }
 
@@ -115,13 +124,40 @@ fn build_prompt(
                 let FileType::Image { mime_type } = &file.metadata.file_type else {
                     continue;
                 };
-                // Flush accumulated text as a Text part before emitting the image
                 text.push_str(&format!(
                     "<file path=\"{}\" type=\"image\">\n</file>\n",
                     file.metadata.file_name
                 ));
                 parts.push(PromptPart::Text(std::mem::take(&mut text)));
                 parts.push(PromptPart::Image {
+                    mime_type: mime_type.clone(),
+                    data: bytes.clone(),
+                });
+            }
+            FileData::Audio(bytes, duration) => {
+                let FileType::Audio { mime_type } = &file.metadata.file_type else {
+                    continue;
+                };
+                text.push_str(&format!(
+                    "<file path=\"{}\" type=\"audio\" duration=\"{:.2}s\">\n</file>\n",
+                    file.metadata.file_name, duration
+                ));
+                parts.push(PromptPart::Text(std::mem::take(&mut text)));
+                parts.push(PromptPart::Audio {
+                    mime_type: mime_type.clone(),
+                    data: bytes.clone(),
+                });
+            }
+            FileData::Video(bytes, duration) => {
+                let FileType::Video { mime_type } = &file.metadata.file_type else {
+                    continue;
+                };
+                text.push_str(&format!(
+                    "<file path=\"{}\" type=\"video\" duration=\"{:.2}s\">\n</file>\n",
+                    file.metadata.file_name, duration
+                ));
+                parts.push(PromptPart::Text(std::mem::take(&mut text)));
+                parts.push(PromptPart::Video {
                     mime_type: mime_type.clone(),
                     data: bytes.clone(),
                 });
@@ -228,16 +264,29 @@ pub async fn run_summarize_loop(
 
             match file::read_file(file_path).await {
                 Ok(processed) => {
-                    // Check image support once on the first image encountered
+                    // Check multimodal support once per batch/run
                     if matches!(processed.data, FileData::Image(_)) && !images_support_checked {
                         images_support_checked = true;
                         if !provider.supports_images(&model_id.model).await? {
                             return Err(anyhow!(
-                                "The model '{}' does not support image analysis. \
-                                Please choose a vision-capable model.",
+                                "The model '{}' does not support image analysis.",
                                 model_id.model
                             ));
                         }
+                    }
+                    if matches!(processed.data, FileData::Audio(_, _))
+                        && !provider.supports_audio(&model_id.model).await? {
+                            return Err(anyhow!(
+                                "The model '{}' does not support audio analysis.",
+                                model_id.model
+                            ));
+                    }
+                    if matches!(processed.data, FileData::Video(_, _))
+                        && !provider.supports_video(&model_id.model).await? {
+                            return Err(anyhow!(
+                                "The model '{}' does not support video analysis.",
+                                model_id.model
+                            ));
                     }
 
                     let file_cost = estimate_file_cost(&processed);

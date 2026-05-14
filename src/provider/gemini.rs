@@ -90,6 +90,20 @@ impl LlmProvider for GeminiProvider {
                     data: STANDARD.encode(data),
                 }),
             },
+            PromptPart::Audio { mime_type, data } => GeminiPart {
+                text: None,
+                inline_data: Some(GeminiInlineData {
+                    mime_type: mime_type.clone(),
+                    data: STANDARD.encode(data),
+                }),
+            },
+            PromptPart::Video { mime_type, data } => GeminiPart {
+                text: None,
+                inline_data: Some(GeminiInlineData {
+                    mime_type: mime_type.clone(),
+                    data: STANDARD.encode(data),
+                }),
+            },
         }).collect();
 
         let req_body = GeminiRequest {
@@ -163,6 +177,12 @@ impl LlmProvider for GeminiProvider {
     }
 
     async fn supports_images(&self, _model: &str) -> Result<bool> {
+        Ok(true)
+    }
+    async fn supports_audio(&self, _model: &str) -> Result<bool> {
+        Ok(true)
+    }
+    async fn supports_video(&self, _model: &str) -> Result<bool> {
         Ok(true)
     }
 }
