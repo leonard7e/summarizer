@@ -1,6 +1,7 @@
-use super::LlmProvider;
+use super::{LlmProvider, PromptPart};
 use anyhow::{Result, anyhow};
 use async_trait::async_trait;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
@@ -41,7 +42,16 @@ struct GeminiContent {
 
 #[derive(Serialize, Deserialize)]
 struct GeminiPart {
-    text: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    inline_data: Option<GeminiInlineData>,
+}
+
+#[derive(Serialize, Deserialize)]
+struct GeminiInlineData {
+    mime_type: String,
+    data: String,
 }
 
 #[derive(Deserialize)]
@@ -62,16 +72,28 @@ struct GeminiError {
 
 #[async_trait]
 impl LlmProvider for GeminiProvider {
-    async fn complete(&self, prompt: &str, model: &str) -> Result<String> {
+    async fn complete(&self, prompt_parts: &[PromptPart], model: &str) -> Result<String> {
         let url = format!(
             "{}/v1beta/models/{}:generateContent?key={}",
             self.base_url, model, self.api_key
         );
 
+        let parts: Vec<GeminiPart> = prompt_parts.iter().map(|p| match p {
+            PromptPart::Text(t) => GeminiPart {
+                text: Some(t.clone()),
+                inline_data: None,
+            },
+            PromptPart::Image { mime_type, data } => GeminiPart {
+                text: None,
+                inline_data: Some(GeminiInlineData {
+                    mime_type: mime_type.clone(),
+                    data: STANDARD.encode(data),
+                }),
+            },
+        }).collect();
+
         let req_body = GeminiRequest {
-            contents: vec![GeminiContent {
-                parts: vec![GeminiPart { text: prompt.to_string() }],
-            }],
+            contents: vec![GeminiContent { parts }],
         };
 
         let res = self.client.post(&url).json(&req_body).send().await?;
@@ -92,7 +114,7 @@ impl LlmProvider for GeminiProvider {
             .candidates
             .and_then(|c| c.into_iter().next())
             .and_then(|c| c.content.parts.into_iter().next())
-            .map(|p| p.text)
+            .and_then(|p| p.text)
             .ok_or_else(|| anyhow!("Invalid or empty Gemini response"))?;
 
         Ok(text)
@@ -139,6 +161,10 @@ impl LlmProvider for GeminiProvider {
         let info: ModelInfo = res.json().await?;
         Ok(info.input_token_limit.unwrap_or(crate::provider::DEFAULT_CONTEXT_LIMIT))
     }
+
+    async fn supports_images(&self, _model: &str) -> Result<bool> {
+        Ok(true)
+    }
 }
 
 #[cfg(test)]
@@ -176,7 +202,7 @@ mod tests {
             .await;
 
         let result = provider
-            .complete("Prompt", "test-model")
+            .complete(&[PromptPart::Text("Prompt".to_string())], "test-model")
             .await
             .unwrap();
         assert_eq!(result, "Zusammenfassung");
@@ -206,7 +232,7 @@ mod tests {
             .create_async()
             .await;
 
-        let result = provider.complete("Prompt", "test-model").await;
+        let result = provider.complete(&[PromptPart::Text("Prompt".to_string())], "test-model").await;
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("Gemini API HTTP Error"));

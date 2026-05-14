@@ -27,16 +27,23 @@ impl ModelId {
     }
 }
 
+pub enum PromptPart {
+    Text(String),
+    Image { mime_type: String, data: Vec<u8> },
+}
+
 pub const DEFAULT_CONTEXT_LIMIT: usize = 8192;
 
 /// Common trait implemented by all language model providers to standardize interactions.
 #[async_trait]
 pub trait LlmProvider {
-    async fn complete(&self, prompt: &str, model: &str) -> Result<String>;
+    async fn complete(&self, prompt: &[PromptPart], model: &str) -> Result<String>;
 
     async fn list_models(&self) -> Result<Vec<String>>;
 
     async fn get_context_limit(&self, model: &str) -> Result<usize>;
+
+    async fn supports_images(&self, model: &str) -> Result<bool>;
 }
 
 /// Factory function to instantiate the appropriate provider based on its name and configuration.

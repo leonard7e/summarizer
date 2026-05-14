@@ -1,6 +1,7 @@
-use super::LlmProvider;
+use super::{LlmProvider, PromptPart};
 use anyhow::{anyhow, Result};
 use async_trait::async_trait;
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use reqwest::{header, Client};
 use serde::{Deserialize, Serialize};
 
@@ -42,7 +43,21 @@ struct ChatCompletionRequest<'a> {
 #[derive(Serialize)]
 struct Message<'a> {
     role: &'a str,
-    content: &'a str,
+    content: Vec<OpenAiContentPart>,
+}
+
+#[derive(Serialize)]
+#[serde(tag = "type")]
+enum OpenAiContentPart {
+    #[serde(rename = "text")]
+    Text { text: String },
+    #[serde(rename = "image_url")]
+    ImageUrl { image_url: OpenAiImageUrl },
+}
+
+#[derive(Serialize)]
+struct OpenAiImageUrl {
+    url: String,
 }
 
 #[derive(Deserialize)]
@@ -68,10 +83,19 @@ struct ApiError {
 
 #[async_trait]
 impl LlmProvider for OpenAiCompatibleProvider {
-    async fn complete(&self, prompt: &str, model: &str) -> Result<String> {
+    async fn complete(&self, prompt_parts: &[PromptPart], model: &str) -> Result<String> {
+        let content_parts: Vec<OpenAiContentPart> = prompt_parts.iter().map(|p| match p {
+            PromptPart::Text(t) => OpenAiContentPart::Text { text: t.clone() },
+            PromptPart::Image { mime_type, data } => OpenAiContentPart::ImageUrl {
+                image_url: OpenAiImageUrl {
+                    url: format!("data:{};base64,{}", mime_type, STANDARD.encode(data)),
+                },
+            },
+        }).collect();
+
         let messages = vec![Message {
             role: "user",
-            content: prompt,
+            content: content_parts,
         }];
 
         let req_body = ChatCompletionRequest { model, messages };
@@ -160,6 +184,54 @@ impl LlmProvider for OpenAiCompatibleProvider {
 
         Ok(limit.unwrap_or(crate::provider::DEFAULT_CONTEXT_LIMIT))
     }
+
+    async fn supports_images(&self, model: &str) -> Result<bool> {
+        #[derive(Deserialize)]
+        struct ModelsResponse {
+            data: Vec<ModelData>,
+        }
+        #[derive(Deserialize)]
+        struct ModelData {
+            id: String,
+            architecture: Option<Architecture>,
+        }
+        #[derive(Deserialize)]
+        struct Architecture {
+            input_modalities: Option<Vec<String>>,
+        }
+
+        let url = format!("{}/models", self.base_url);
+
+        // Query /models and inspect input_modalities.
+        // If the endpoint is unavailable or doesn't expose modality data
+        // (e.g. for local/generic providers), we optimistically allow the request —
+        // the user chose the model and knows its capabilities.
+        let image_support: Option<bool> = async {
+            let resp: ModelsResponse = self
+                .client
+                .get(&url)
+                .send()
+                .await
+                .ok()?
+                .error_for_status()
+                .ok()?
+                .json()
+                .await
+                .ok()?;
+
+            let modalities = resp
+                .data
+                .into_iter()
+                .find(|m| m.id == model)?
+                .architecture?
+                .input_modalities?;
+
+            Some(modalities.iter().any(|m| m == "image"))
+        }
+        .await;
+
+        Ok(image_support.unwrap_or(true))
+    }
 }
 
 #[cfg(test)]
@@ -189,7 +261,7 @@ mod tests {
             .create_async()
             .await;
 
-        let result = provider.complete("Prompt", "test-model").await.unwrap();
+        let result = provider.complete(&[PromptPart::Text("Prompt".to_string())], "test-model").await.unwrap();
         assert_eq!(result, "Compatible Zusammenfassung");
         mock.assert_async().await;
     }
@@ -212,7 +284,7 @@ mod tests {
             .create_async()
             .await;
 
-        let result = provider.complete("Prompt", "test-model").await;
+        let result = provider.complete(&[PromptPart::Text("Prompt".to_string())], "test-model").await;
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("OpenAI API HTTP Error"));

@@ -4,10 +4,12 @@ use tokio::fs;
 
 pub enum FileType {
     Text { encoding: String },
+    Image { mime_type: String },
 }
 
 pub enum FileData {
     Text(String),
+    Image(Vec<u8>),
 }
 
 pub struct FileMetadata {
@@ -30,19 +32,46 @@ pub async fn read_file(path: &Path) -> Result<ProcessedFile> {
         .unwrap_or("unknown")
         .to_string();
 
-    match fs::read_to_string(path).await {
-        Ok(content) => Ok(ProcessedFile {
+    let ext = path
+        .extension()
+        .and_then(|e| e.to_str())
+        .unwrap_or("")
+        .to_lowercase();
+
+    // Returns Some(mime_type) for known image extensions, None for text.
+    let image_mime = match ext.as_str() {
+        "png"        => Some("image/png"),
+        "jpg" | "jpeg" => Some("image/jpeg"),
+        "webp"       => Some("image/webp"),
+        "gif"        => Some("image/gif"),
+        _            => None,
+    };
+
+    if let Some(mime_type) = image_mime {
+        let content = fs::read(path)
+            .await
+            .map_err(|e| anyhow!("Failed to read image file: {}", e))?;
+        Ok(ProcessedFile {
             metadata: FileMetadata {
                 file_name,
-                file_type: FileType::Text {
-                    encoding: "utf-8".into(),
-                },
+                file_type: FileType::Image { mime_type: mime_type.to_string() },
+            },
+            data: FileData::Image(content),
+        })
+    } else {
+        let content = fs::read_to_string(path).await.map_err(|e| {
+            if e.kind() == std::io::ErrorKind::InvalidData {
+                anyhow!("File type not supported yet.")
+            } else {
+                anyhow!("Failed to read text file: {}", e)
+            }
+        })?;
+        Ok(ProcessedFile {
+            metadata: FileMetadata {
+                file_name,
+                file_type: FileType::Text { encoding: "utf-8".into() },
             },
             data: FileData::Text(content),
-        }),
-        Err(e) if e.kind() == std::io::ErrorKind::InvalidData => {
-            Err(anyhow!("File type not supported yet."))
-        }
-        Err(e) => Err(anyhow!("Failed to read file: {}", e)),
+        })
     }
 }
