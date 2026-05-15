@@ -11,14 +11,22 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      - name: Setup Environment
+        shell: bash
+        run: |
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          echo "DOC_NAME=summarizer-$VERSION-manual" >> $GITHUB_ENV
+          echo "FILE_NAME=summarizer-$VERSION-manual.pdf" >> $GITHUB_ENV
+      
       - name: Generate PDF
         uses: docker://asciidoctor/docker-asciidoctor
         with:
-          args: asciidoctor-pdf -a icons=font doc/summarizer.adoc -o doc/summarizer.pdf
+          args: asciidoctor-pdf -a icons=font doc/summarizer.adoc -o doc/${{ env.FILE_NAME }}
       - uses: actions/upload-artifact@v4
         with:
-          name: manual
-          path: doc/summarizer.pdf
+          name: ${{ env.DOC_NAME }}
+          path: doc/${{ env.FILE_NAME }}
 
   # Build Binaries only
   dist:
