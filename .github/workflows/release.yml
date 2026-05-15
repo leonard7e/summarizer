@@ -1,0 +1,36 @@
+name: Release Build
+
+on:
+  workflow_dispatch: # Ermöglicht den manuellen Start zum Testen
+  push:
+    tags:
+      - 'v*' # Läuft nur, wenn du einen Tag wie v1.0 pushst
+
+jobs:
+  dist:
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact_name: summarizer-linux
+            asset_name: summarizer
+          - os: windows-latest
+            artifact_name: summarizer-windows
+            asset_name: summarizer.exe
+          - os: macos-latest
+            artifact_name: summarizer-macos
+            asset_name: summarizer
+
+    runs-on: ${{ matrix.os }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build Release
+        run: cargo build --release
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact_name }}
+          path: target/release/${{ matrix.asset_name }}
