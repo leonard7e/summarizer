@@ -95,13 +95,13 @@ The `ollama` provider runs models locally via https://ollama.com[Ollama], with n
 ----
 ollama pull llama3
 ----
-3. Optionally configure the host and context window in `config.yaml` (defaults are usually fine):
+3. Optionally configure the base_url and context window in `config.yaml` (defaults are usually fine):
 +
 [source,yaml]
 ----
 providers:
   ollama:
-    host: "http://localhost:11434"
+    base_url: "http://localhost:11434"
     num_ctx: 4096
 ----
 

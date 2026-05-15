@@ -1,8 +1,8 @@
 use super::{LlmProvider, PromptPart};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use reqwest::{header, Client};
+use reqwest::{Client, header};
 use serde::{Deserialize, Serialize};
 
 pub struct OpenAiCompatibleProvider {
@@ -99,25 +99,28 @@ struct ApiError {
 #[async_trait]
 impl LlmProvider for OpenAiCompatibleProvider {
     async fn complete(&self, prompt_parts: &[PromptPart], model: &str) -> Result<String> {
-        let content_parts: Vec<OpenAiContentPart> = prompt_parts.iter().map(|p| match p {
-            PromptPart::Text(t) => OpenAiContentPart::Text { text: t.clone() },
-            PromptPart::Image { mime_type, data } => OpenAiContentPart::ImageUrl {
-                image_url: OpenAiImageUrl {
-                    url: format!("data:{};base64,{}", mime_type, STANDARD.encode(data)),
+        let content_parts: Vec<OpenAiContentPart> = prompt_parts
+            .iter()
+            .map(|p| match p {
+                PromptPart::Text(t) => OpenAiContentPart::Text { text: t.clone() },
+                PromptPart::Image { mime_type, data } => OpenAiContentPart::ImageUrl {
+                    image_url: OpenAiImageUrl {
+                        url: format!("data:{};base64,{}", mime_type, STANDARD.encode(data)),
+                    },
                 },
-            },
-            PromptPart::Audio { mime_type, data } => OpenAiContentPart::InputAudio {
-                input_audio: OpenAiInputAudio {
-                    data: STANDARD.encode(data),
-                    format: mime_type.split('/').nth(1).unwrap_or("mp3").to_string(),
+                PromptPart::Audio { mime_type, data } => OpenAiContentPart::InputAudio {
+                    input_audio: OpenAiInputAudio {
+                        data: STANDARD.encode(data),
+                        format: mime_type.split('/').nth(1).unwrap_or("mp3").to_string(),
+                    },
                 },
-            },
-            PromptPart::Video { mime_type, data } => OpenAiContentPart::VideoUrl {
-                video_url: OpenAiVideoUrl {
-                    url: format!("data:{};base64,{}", mime_type, STANDARD.encode(data)),
+                PromptPart::Video { mime_type, data } => OpenAiContentPart::VideoUrl {
+                    video_url: OpenAiVideoUrl {
+                        url: format!("data:{};base64,{}", mime_type, STANDARD.encode(data)),
+                    },
                 },
-            },
-        }).collect();
+            })
+            .collect();
 
         let messages = vec![Message {
             role: "user",
@@ -128,17 +131,16 @@ impl LlmProvider for OpenAiCompatibleProvider {
 
         let url = format!("{}/chat/completions", self.base_url);
 
-        let res = self
-            .client
-            .post(&url)
-            .json(&req_body)
-            .send()
-            .await?;
+        let res = self.client.post(&url).json(&req_body).send().await?;
 
         let status = res.status();
         if !status.is_success() {
             let error_text = res.text().await.unwrap_or_default();
-            return Err(anyhow!("OpenAI API HTTP Error ({}): {}", status, error_text));
+            return Err(anyhow!(
+                "OpenAI API HTTP Error ({}): {}",
+                status,
+                error_text
+            ));
         }
 
         let resp: ChatCompletionResponse = res.json().await?;
@@ -168,13 +170,7 @@ impl LlmProvider for OpenAiCompatibleProvider {
 
         let url = format!("{}/models", self.base_url);
 
-        let res: ModelsResponse = self
-            .client
-            .get(&url)
-            .send()
-            .await?
-            .json()
-            .await?;
+        let res: ModelsResponse = self.client.get(&url).send().await?.json().await?;
 
         Ok(res.data.into_iter().map(|m| m.id).collect())
     }
@@ -192,7 +188,7 @@ impl LlmProvider for OpenAiCompatibleProvider {
         }
 
         let url = format!("{}/models", self.base_url);
-        
+
         let res = self.client.get(&url).send().await?;
         if !res.status().is_success() {
             // Safe fallback if /models endpoint doesn't exist or fails
@@ -257,7 +253,7 @@ impl LlmProvider for OpenAiCompatibleProvider {
 
     async fn supports_audio(&self, _model: &str) -> Result<bool> {
         // Similar optimistic fallback for audio
-        Ok(true) 
+        Ok(true)
     }
 
     async fn supports_video(&self, _model: &str) -> Result<bool> {
@@ -281,7 +277,8 @@ mod tests {
             .mock("POST", "/chat/completions")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{
+            .with_body(
+                r#"{
                 "choices": [
                     {
                         "message": {
@@ -289,11 +286,15 @@ mod tests {
                         }
                     }
                 ]
-            }"#)
+            }"#,
+            )
             .create_async()
             .await;
 
-        let result = provider.complete(&[PromptPart::Text("Prompt".to_string())], "test-model").await.unwrap();
+        let result = provider
+            .complete(&[PromptPart::Text("Prompt".to_string())], "test-model")
+            .await
+            .unwrap();
         assert_eq!(result, "Compatible Zusammenfassung");
         mock.assert_async().await;
     }
@@ -308,15 +309,19 @@ mod tests {
             .mock("POST", "/chat/completions")
             .with_status(401)
             .with_header("content-type", "application/json")
-            .with_body(r#"{
+            .with_body(
+                r#"{
                 "error": {
                     "message": "Invalid API Key"
                 }
-            }"#)
+            }"#,
+            )
             .create_async()
             .await;
 
-        let result = provider.complete(&[PromptPart::Text("Prompt".to_string())], "test-model").await;
+        let result = provider
+            .complete(&[PromptPart::Text("Prompt".to_string())], "test-model")
+            .await;
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("OpenAI API HTTP Error"));
@@ -334,14 +339,16 @@ mod tests {
             .mock("GET", "/models")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{
+            .with_body(
+                r#"{
                 "data": [
                     {
                         "id": "test-model",
                         "context_length": 16384
                     }
                 ]
-            }"#)
+            }"#,
+            )
             .create_async()
             .await;
 
@@ -349,7 +356,7 @@ mod tests {
         assert_eq!(limit, 16384);
         mock.assert_async().await;
     }
-    
+
     #[tokio::test]
     async fn test_openai_compatible_get_context_limit_fallback() {
         let mut server = Server::new_async().await;
@@ -360,13 +367,15 @@ mod tests {
             .mock("GET", "/models")
             .with_status(200)
             .with_header("content-type", "application/json")
-            .with_body(r#"{
+            .with_body(
+                r#"{
                 "data": [
                     {
                         "id": "test-model"
                     }
                 ]
-            }"#)
+            }"#,
+            )
             .create_async()
             .await;
 

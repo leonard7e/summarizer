@@ -16,10 +16,13 @@ pub struct ModelId {
 impl ModelId {
     /// Parses a model string in the format 'provider:model_id'.
     pub fn parse(s: &str) -> Result<Self> {
-        let (provider, model) = s
-            .split_once(':')
-            .ok_or_else(|| anyhow!("Invalid model format. Expected 'provider:model_id', got '{}'", s))?;
-        
+        let (provider, model) = s.split_once(':').ok_or_else(|| {
+            anyhow!(
+                "Invalid model format. Expected 'provider:model_id', got '{}'",
+                s
+            )
+        })?;
+
         Ok(Self {
             provider: provider.to_lowercase(),
             model: model.to_string(),
@@ -71,17 +74,25 @@ pub fn create_provider(provider_name: &str, config: &Config) -> Result<Box<dyn L
                 .ok_or_else(|| anyhow!("OpenRouter provider not configured"))?
                 .api_key
                 .clone();
-                Ok(Box::new(openai_compatible::OpenAiCompatibleProvider::new(
+            Ok(Box::new(openai_compatible::OpenAiCompatibleProvider::new(
                 api_key,
-                    "https://openrouter.ai/api/v1".to_string(),
-                )?))
+                "https://openrouter.ai/api/v1".to_string(),
+            )?))
         }
         "ollama" => {
             let conf = config.providers.ollama.clone().unwrap_or_default();
-            Ok(Box::new(ollama::OllamaProvider::new(conf.host, conf.num_ctx)))
+            Ok(Box::new(ollama::OllamaProvider::new(
+                conf.base_url,
+                conf.num_ctx,
+            )))
         }
         name => {
-            if let Some(conf) = config.providers.openai_compatible.iter().find(|c| c.name == name) {
+            if let Some(conf) = config
+                .providers
+                .openai_compatible
+                .iter()
+                .find(|c| c.name == name)
+            {
                 Ok(Box::new(openai_compatible::OpenAiCompatibleProvider::new(
                     conf.api_key.clone(),
                     conf.base_url.clone(),

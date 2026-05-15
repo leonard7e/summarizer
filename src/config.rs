@@ -56,13 +56,13 @@ pub struct OpenAiCompatibleConfig {
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct OllamaConfig {
-    #[serde(default = "default_ollama_host")]
-    pub host: String,
+    #[serde(default = "default_ollama_base_url")]
+    pub base_url: String,
     #[serde(default = "default_ollama_num_ctx")]
     pub num_ctx: usize,
 }
 
-fn default_ollama_host() -> String {
+fn default_ollama_base_url() -> String {
     "http://localhost:11434".to_string()
 }
 
@@ -73,7 +73,7 @@ fn default_ollama_num_ctx() -> usize {
 impl Default for OllamaConfig {
     fn default() -> Self {
         Self {
-            host: default_ollama_host(),
+            base_url: default_ollama_base_url(),
             num_ctx: default_ollama_num_ctx(),
         }
     }
@@ -112,7 +112,8 @@ impl Config {
     }
 
     pub fn path() -> anyhow::Result<PathBuf> {
-        let mut path = dirs::config_dir().ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
+        let mut path =
+            dirs::config_dir().ok_or_else(|| anyhow::anyhow!("Could not find config directory"))?;
         path.push("summarizer");
         path.push("config.yaml");
         Ok(path)
@@ -130,8 +131,11 @@ mod tests {
     }
 
     #[test]
-    fn test_ollama_default_host() {
-        let config = OllamaConfig { host: default_ollama_host(), num_ctx: default_ollama_num_ctx() };
-        assert_eq!(config.host, "http://localhost:11434");
+    fn test_ollama_default_base_url() {
+        let config = OllamaConfig {
+            base_url: default_ollama_base_url(),
+            num_ctx: default_ollama_num_ctx(),
+        };
+        assert_eq!(config.base_url, "http://localhost:11434");
     }
 }

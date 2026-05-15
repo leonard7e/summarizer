@@ -1,20 +1,20 @@
 use super::{LlmProvider, PromptPart};
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 
 pub struct OllamaProvider {
-    host: String,
+    base_url: String,
     num_ctx: usize,
     client: Client,
 }
 
 impl OllamaProvider {
-    pub fn new(host: String, num_ctx: usize) -> Self {
+    pub fn new(base_url: String, num_ctx: usize) -> Self {
         Self {
-            host: host.trim_end_matches('/').to_string(),
+            base_url: base_url.trim_end_matches('/').to_string(),
             num_ctx,
             client: Client::new(),
         }
@@ -56,17 +56,17 @@ struct OllamaResponse {
 #[async_trait]
 impl LlmProvider for OllamaProvider {
     async fn complete(&self, prompt_parts: &[PromptPart], model: &str) -> Result<String> {
-        let (prompt_text, images): (String, Vec<String>) = prompt_parts.iter().fold(
-            (String::new(), Vec::new()),
-            |(mut text, mut imgs), part| {
-                match part {
-                    PromptPart::Text(t) => text.push_str(t),
-                    PromptPart::Image { data, .. } => imgs.push(STANDARD.encode(data)),
-                    _ => {} // Ignore audio/video as Ollama doesn't support them natively yet
-                }
-                (text, imgs)
-            },
-        );
+        let (prompt_text, images): (String, Vec<String>) =
+            prompt_parts
+                .iter()
+                .fold((String::new(), Vec::new()), |(mut text, mut imgs), part| {
+                    match part {
+                        PromptPart::Text(t) => text.push_str(t),
+                        PromptPart::Image { data, .. } => imgs.push(STANDARD.encode(data)),
+                        _ => {} // Ignore audio/video as Ollama doesn't support them natively yet
+                    }
+                    (text, imgs)
+                });
 
         let images_opt = (!images.is_empty()).then_some(images);
 
@@ -80,7 +80,7 @@ impl LlmProvider for OllamaProvider {
             },
         };
 
-        let url = format!("{}/api/generate", self.host);
+        let url = format!("{}/api/generate", self.base_url);
 
         let res = self.client.post(&url).json(&req_body).send().await?;
 
@@ -104,14 +104,14 @@ impl LlmProvider for OllamaProvider {
             name: String,
         }
 
-        let url = format!("{}/api/tags", self.host);
+        let url = format!("{}/api/tags", self.base_url);
         let res: ModelsResponse = self.client.get(&url).send().await?.json().await?;
 
         Ok(res.models.into_iter().map(|m| m.name).collect())
     }
 
     async fn get_context_limit(&self, model: &str) -> Result<usize> {
-        let url = format!("{}/api/show", self.host);
+        let url = format!("{}/api/show", self.base_url);
         let req_body = OllamaShowRequest { model };
 
         // Silently fall back to self.num_ctx if the request fails or returns
@@ -152,7 +152,7 @@ impl LlmProvider for OllamaProvider {
     }
 
     async fn supports_images(&self, model: &str) -> Result<bool> {
-        let url = format!("{}/api/show", self.host);
+        let url = format!("{}/api/show", self.base_url);
         let req_body = OllamaShowRequest { model };
 
         let supported = self
@@ -197,7 +197,10 @@ mod tests {
             .create_async()
             .await;
 
-        let result = provider.complete(&[PromptPart::Text("Prompt".to_string())], "test-model").await.unwrap();
+        let result = provider
+            .complete(&[PromptPart::Text("Prompt".to_string())], "test-model")
+            .await
+            .unwrap();
         assert_eq!(result, "Ollama Zusammenfassung");
         mock.assert_async().await;
     }
@@ -215,7 +218,9 @@ mod tests {
             .create_async()
             .await;
 
-        let result = provider.complete(&[PromptPart::Text("Prompt".to_string())], "test-model").await;
+        let result = provider
+            .complete(&[PromptPart::Text("Prompt".to_string())], "test-model")
+            .await;
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("Ollama API Error"));

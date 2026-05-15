@@ -78,33 +78,36 @@ impl LlmProvider for GeminiProvider {
             self.base_url, model, self.api_key
         );
 
-        let parts: Vec<GeminiPart> = prompt_parts.iter().map(|p| match p {
-            PromptPart::Text(t) => GeminiPart {
-                text: Some(t.clone()),
-                inline_data: None,
-            },
-            PromptPart::Image { mime_type, data } => GeminiPart {
-                text: None,
-                inline_data: Some(GeminiInlineData {
-                    mime_type: mime_type.clone(),
-                    data: STANDARD.encode(data),
-                }),
-            },
-            PromptPart::Audio { mime_type, data } => GeminiPart {
-                text: None,
-                inline_data: Some(GeminiInlineData {
-                    mime_type: mime_type.clone(),
-                    data: STANDARD.encode(data),
-                }),
-            },
-            PromptPart::Video { mime_type, data } => GeminiPart {
-                text: None,
-                inline_data: Some(GeminiInlineData {
-                    mime_type: mime_type.clone(),
-                    data: STANDARD.encode(data),
-                }),
-            },
-        }).collect();
+        let parts: Vec<GeminiPart> = prompt_parts
+            .iter()
+            .map(|p| match p {
+                PromptPart::Text(t) => GeminiPart {
+                    text: Some(t.clone()),
+                    inline_data: None,
+                },
+                PromptPart::Image { mime_type, data } => GeminiPart {
+                    text: None,
+                    inline_data: Some(GeminiInlineData {
+                        mime_type: mime_type.clone(),
+                        data: STANDARD.encode(data),
+                    }),
+                },
+                PromptPart::Audio { mime_type, data } => GeminiPart {
+                    text: None,
+                    inline_data: Some(GeminiInlineData {
+                        mime_type: mime_type.clone(),
+                        data: STANDARD.encode(data),
+                    }),
+                },
+                PromptPart::Video { mime_type, data } => GeminiPart {
+                    text: None,
+                    inline_data: Some(GeminiInlineData {
+                        mime_type: mime_type.clone(),
+                        data: STANDARD.encode(data),
+                    }),
+                },
+            })
+            .collect();
 
         let req_body = GeminiRequest {
             contents: vec![GeminiContent { parts }],
@@ -115,7 +118,11 @@ impl LlmProvider for GeminiProvider {
         let status = res.status();
         if !status.is_success() {
             let error_text = res.text().await.unwrap_or_default();
-            return Err(anyhow!("Gemini API HTTP Error ({}): {}", status, error_text));
+            return Err(anyhow!(
+                "Gemini API HTTP Error ({}): {}",
+                status,
+                error_text
+            ));
         }
 
         let resp: GeminiResponse = res.json().await?;
@@ -173,7 +180,9 @@ impl LlmProvider for GeminiProvider {
         }
 
         let info: ModelInfo = res.json().await?;
-        Ok(info.input_token_limit.unwrap_or(crate::provider::DEFAULT_CONTEXT_LIMIT))
+        Ok(info
+            .input_token_limit
+            .unwrap_or(crate::provider::DEFAULT_CONTEXT_LIMIT))
     }
 
     async fn supports_images(&self, _model: &str) -> Result<bool> {
@@ -252,7 +261,9 @@ mod tests {
             .create_async()
             .await;
 
-        let result = provider.complete(&[PromptPart::Text("Prompt".to_string())], "test-model").await;
+        let result = provider
+            .complete(&[PromptPart::Text("Prompt".to_string())], "test-model")
+            .await;
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
         assert!(err_msg.contains("Gemini API HTTP Error"));

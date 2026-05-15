@@ -1,4 +1,4 @@
-use anyhow::{anyhow, Result};
+use anyhow::{Result, anyhow};
 use std::path::Path;
 use tokio::fs;
 
@@ -56,20 +56,35 @@ impl MediaCategory {
     fn process(self, mime: &str, name: String, data: Vec<u8>) -> ProcessedFile {
         let (file_type, data) = match self {
             Self::Image => (
-                FileType::Image { mime_type: mime.into() },
-                FileData::Image(data)
+                FileType::Image {
+                    mime_type: mime.into(),
+                },
+                FileData::Image(data),
             ),
             Self::Audio => {
                 let dur = get_media_duration(&data);
-                (FileType::Audio { mime_type: mime.into() }, FileData::Audio(data, dur))
+                (
+                    FileType::Audio {
+                        mime_type: mime.into(),
+                    },
+                    FileData::Audio(data, dur),
+                )
             }
             Self::Video => {
                 let dur = get_media_duration(&data);
-                (FileType::Video { mime_type: mime.into() }, FileData::Video(data, dur))
+                (
+                    FileType::Video {
+                        mime_type: mime.into(),
+                    },
+                    FileData::Video(data, dur),
+                )
             }
         };
         ProcessedFile {
-            metadata: FileMetadata { file_name: name, file_type },
+            metadata: FileMetadata {
+                file_name: name,
+                file_type,
+            },
             data,
         }
     }
@@ -85,15 +100,22 @@ fn get_media_duration(data: &[u8]) -> f64 {
     let mss = MediaSourceStream::new(source, Default::default());
 
     symphonia::default::get_probe()
-        .format(&Hint::new(), mss, &FormatOptions::default(), &Default::default())
+        .format(
+            &Hint::new(),
+            mss,
+            &FormatOptions::default(),
+            &Default::default(),
+        )
         .ok()
         .map(|probed| {
-            probed.format
+            probed
+                .format
                 .tracks()
                 .iter()
                 .filter_map(|t| {
                     let p = &t.codec_params;
-                    p.n_frames.zip(p.time_base)
+                    p.n_frames
+                        .zip(p.time_base)
                         .map(|(n, tb)| tb.calc_time(n))
                         .map(|ts| ts.seconds as f64 + ts.frac)
                 })
@@ -103,30 +125,36 @@ fn get_media_duration(data: &[u8]) -> f64 {
 }
 
 pub async fn read_file(path: &Path) -> Result<ProcessedFile> {
-    let file_name = path.file_name()
+    let file_name = path
+        .file_name()
         .and_then(|n| n.to_str())
         .unwrap_or("unknown")
         .to_string();
 
-    let ext = path.extension()
+    let ext = path
+        .extension()
         .and_then(|e| e.to_str())
         .unwrap_or("")
         .to_lowercase();
 
     if let Some((cat, mime)) = MediaCategory::from_ext(&ext) {
-        let data = fs::read(path).await.map_err(|e| anyhow!("Failed to read file: {}", e))?;
+        let data = fs::read(path)
+            .await
+            .map_err(|e| anyhow!("Failed to read file: {}", e))?;
         Ok(cat.process(mime, file_name, data))
     } else {
-        let text = fs::read_to_string(path).await.map_err(|e| {
-            match e.kind() {
-                std::io::ErrorKind::InvalidData => anyhow!("File type not supported yet: {}", file_name),
-                _ => anyhow!("Failed to read text file: {}", e),
+        let text = fs::read_to_string(path).await.map_err(|e| match e.kind() {
+            std::io::ErrorKind::InvalidData => {
+                anyhow!("File type not supported yet: {}", file_name)
             }
+            _ => anyhow!("Failed to read text file: {}", e),
         })?;
         Ok(ProcessedFile {
             metadata: FileMetadata {
                 file_name,
-                file_type: FileType::Text { encoding: "utf-8".into() },
+                file_type: FileType::Text {
+                    encoding: "utf-8".into(),
+                },
             },
             data: FileData::Text(text),
         })

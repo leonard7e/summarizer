@@ -85,8 +85,7 @@ async fn main() -> Result<()> {
                     "Please summarize the following text comprehensively.".to_string()
                 });
 
-            engine::run_summarize_loop(files, config, &model_str, cli.debug, &final_prompt)
-                .await
+            engine::run_summarize_loop(files, config, &model_str, cli.debug, &final_prompt).await
         }
     }
 }

@@ -91,7 +91,9 @@ fn build_prompt(
     // 2. Iterative Task Definition
     text.push_str("<task>\n");
     text.push_str("You are in an iterative process. Your task is to update the 'previous_result' using the information found in 'new_files'.\n");
-    text.push_str("- Do NOT change the requested output format defined in \"system_instruction\".\n");
+    text.push_str(
+        "- Do NOT change the requested output format defined in \"system_instruction\".\n",
+    );
     text.push_str("- Do NOT add conversational filler text (e.g. \"Here is the summary\").\n");
     text.push_str("- Merge intelligently without losing previous critical data.\n");
     text.push_str("</task>\n\n");
@@ -221,24 +223,29 @@ pub async fn run_summarize_loop(
     //    below once we know the actual previous_result size.
     let batches: Vec<Vec<PathBuf>> = files
         .into_iter()
-        .try_fold(vec![(0_usize, Vec::new())], |mut acc, path| -> Result<Vec<(usize, Vec<PathBuf>)>> {
-            // Estimate token usage via file size (bytes ≈ chars for ASCII/UTF-8).
-            // For images we use a rough token estimate based on file size as a proxy
-            // before we read the file, then refine during actual processing.
-            let size = std::fs::metadata(&path)
-                .map(|m| m.len() as usize)
-                .unwrap_or(0);
+        .try_fold(
+            vec![(0_usize, Vec::new())],
+            |mut acc, path| -> Result<Vec<(usize, Vec<PathBuf>)>> {
+                // Estimate token usage via file size (bytes ≈ chars for ASCII/UTF-8).
+                // For images we use a rough token estimate based on file size as a proxy
+                // before we read the file, then refine during actual processing.
+                let size = std::fs::metadata(&path)
+                    .map(|m| m.len() as usize)
+                    .unwrap_or(0);
 
-            let (current_size, batch) = acc.last_mut().ok_or_else(|| anyhow!("Batch accumulator is unexpectedly empty"))?;
+                let (current_size, batch) = acc
+                    .last_mut()
+                    .ok_or_else(|| anyhow!("Batch accumulator is unexpectedly empty"))?;
 
-            if !batch.is_empty() && (*current_size + size > initial_file_budget) {
-                acc.push((size, vec![path]));
-            } else {
-                *current_size += size;
-                batch.push(path);
-            }
-            Ok(acc)
-        })?
+                if !batch.is_empty() && (*current_size + size > initial_file_budget) {
+                    acc.push((size, vec![path]));
+                } else {
+                    *current_size += size;
+                    batch.push(path);
+                }
+                Ok(acc)
+            },
+        )?
         .into_iter()
         .map(|(_, batch)| batch)
         .filter(|batch| !batch.is_empty())
@@ -275,18 +282,20 @@ pub async fn run_summarize_loop(
                         }
                     }
                     if matches!(processed.data, FileData::Audio(_, _))
-                        && !provider.supports_audio(&model_id.model).await? {
-                            return Err(anyhow!(
-                                "The model '{}' does not support audio analysis.",
-                                model_id.model
-                            ));
+                        && !provider.supports_audio(&model_id.model).await?
+                    {
+                        return Err(anyhow!(
+                            "The model '{}' does not support audio analysis.",
+                            model_id.model
+                        ));
                     }
                     if matches!(processed.data, FileData::Video(_, _))
-                        && !provider.supports_video(&model_id.model).await? {
-                            return Err(anyhow!(
-                                "The model '{}' does not support video analysis.",
-                                model_id.model
-                            ));
+                        && !provider.supports_video(&model_id.model).await?
+                    {
+                        return Err(anyhow!(
+                            "The model '{}' does not support video analysis.",
+                            model_id.model
+                        ));
                     }
 
                     let file_cost = estimate_file_cost(&processed);

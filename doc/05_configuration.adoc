@@ -41,7 +41,7 @@ providers:
     api_key: "sk-or-..."
 
   ollama:
-    host: "http://localhost:11434"
+    base_url: "http://localhost:11434"
     num_ctx: 4096
 
   openai-compatible:
@@ -98,10 +98,10 @@ providers:
 |===
 | Field | Type | Default | Description
 
-| `host`
+| `base_url`
 | string
 | `http://localhost:11434`
-| Base URL of the Ollama HTTP API.
+| The base URL of the Ollama server.
 
 | `num_ctx`
 | integer
