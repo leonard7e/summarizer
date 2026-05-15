@@ -1,36 +1,67 @@
 name: Release Build
 
 on:
-  workflow_dispatch: # Ermöglicht den manuellen Start zum Testen
+  workflow_dispatch:
   push:
-    tags:
-      - 'v*' # Läuft nur, wenn du einen Tag wie v1.0 pushst
+    tags: ['v*']
 
 jobs:
+  # Create Documentation PDF
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Generate PDF
+        uses: docker://asciidoctor/docker-asciidoctor
+        with:
+          args: asciidoctor-pdf -a icons=font doc/summarizer.adoc -o doc/summarizer.pdf
+      - uses: actions/upload-artifact@v4
+        with:
+          name: manual
+          path: doc/summarizer.pdf
+
+  # Build Binaries and Package them with the PDF
   dist:
+    needs: docs
     strategy:
       matrix:
         include:
           - os: ubuntu-latest
-            artifact_name: summarizer-linux
-            asset_name: summarizer
+            bin: summarizer
+            triplet: x86_64-linux
           - os: windows-latest
-            artifact_name: summarizer-windows
-            asset_name: summarizer.exe
+            bin: summarizer.exe
+            triplet: x86_64-windows
           - os: macos-latest
-            artifact_name: summarizer-macos
-            asset_name: summarizer
+            bin: summarizer
+            triplet: x86_64-macos
 
     runs-on: ${{ matrix.os }}
-
     steps:
       - uses: actions/checkout@v4
+      
+      - name: Setup Environment
+        shell: bash
+        run: |
+          VERSION=$(sed -n 's/^version = "\(.*\)"/\1/p' Cargo.toml | head -n1)
+          echo "DIR=summarizer-$VERSION-${{ matrix.triplet }}" >> $GITHUB_ENV
 
-      - name: Build Release
+      - name: Build
         run: cargo build --release
 
-      - name: Upload Artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
-          name: ${{ matrix.artifact_name }}
-          path: target/release/${{ matrix.asset_name }}
+          name: manual
+          path: doc/
+
+      - name: Package
+        shell: bash
+        run: |
+          mkdir -p ${{ env.DIR }}/bin ${{ env.DIR }}/doc
+          cp target/release/${{ matrix.bin }} ${{ env.DIR }}/bin/
+          cp doc/summarizer.pdf ${{ env.DIR }}/doc/
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.DIR }}
+          path: ${{ env.DIR }}/
