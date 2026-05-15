@@ -20,9 +20,8 @@ jobs:
           name: manual
           path: doc/summarizer.pdf
 
-  # Build Binaries and Package them with the PDF
+  # Build Binaries only
   dist:
-    needs: docs
     strategy:
       matrix:
         include:
@@ -49,17 +48,11 @@ jobs:
       - name: Build
         run: cargo build --release
 
-      - uses: actions/download-artifact@v4
-        with:
-          name: manual
-          path: doc/
-
-      - name: Package
+      - name: Package Binary
         shell: bash
         run: |
-          mkdir -p ${{ env.DIR }}/bin ${{ env.DIR }}/doc
+          mkdir -p ${{ env.DIR }}/bin
           cp target/release/${{ matrix.bin }} ${{ env.DIR }}/bin/
-          cp doc/summarizer.pdf ${{ env.DIR }}/doc/
 
       - uses: actions/upload-artifact@v4
         with:
