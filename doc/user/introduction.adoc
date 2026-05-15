@@ -1,7 +1,7 @@
 [[introduction]]
 == Introduction
 
-`summarizer` is a command-line tool that sends the contents of one or more text files to a large language model (LLM) and prints the model's response.
+`summarizer` is a command-line tool that sends the contents of text files or media files (images, audio, video) to a large language model (LLM) and prints the model's response.
 
 === Motivation
 
@@ -22,6 +22,7 @@ This makes it possible to summarize an arbitrarily large file set with a single 
 * Condensing large log files or error reports
 * Extracting key points from research papers or articles
 * Running custom analysis prompts over many files in one shot
+* Analyzing media files (e.g., describing images or summarizing audio/video)
 
 === Supported Providers
 

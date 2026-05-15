@@ -1,0 +1,15 @@
+= summarizer Development Manual
+:author: summarizer contributors
+:revnumber: 0.1.0
+:toc: left
+:toclevels: 3
+:sectnums:
+:source-highlighter: rouge
+:icons: font
+:imagesdir: ../images
+
+This document contains internal details and development guidelines for `summarizer`.
+
+include::dev/architecture.adoc[]
+
+include::dev/development.adoc[]

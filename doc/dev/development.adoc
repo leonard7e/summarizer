@@ -1,0 +1,48 @@
+[[development]]
+== Development
+
+=== Module Overview
+
+[cols="1,3", options="header"]
+|===
+| Module | Responsibility
+
+| `main`
+| Entry point. Parses CLI, handles stdin, and routes to `engine` or `setup`.
+
+| `cli`
+| CLI definition using `clap`.
+
+| `config`
+| Configuration management and serialization.
+
+| `engine`
+| Summarization loop, batching, and budget calculation.
+
+| `file`
+| File reading and media type detection.
+
+| `provider`
+| `LlmProvider` trait and factory.
+
+| `setup`
+| Interactive initialization and model discovery.
+|===
+
+=== Adding a New Provider
+
+1. **Implement `LlmProvider`** in `src/provider/`.
+2. **Register the module** in `src/provider/mod.rs`.
+3. **Add config struct** in `src/config.rs`.
+4. **Update the factory** in `src/provider/mod.rs`.
+
+=== Building Documentation
+
+[source,bash]
+----
+# User Manual
+asciidoctor doc/user_manual.adoc -D doc/out/
+
+# Development Manual
+asciidoctor doc/development_manual.adoc -D doc/out/
+----

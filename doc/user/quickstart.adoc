@@ -1,0 +1,62 @@
+[[quickstart]]
+== Quick Start
+
+This section gets you from zero to your first summary in minutes.
+
+=== Step 1: Configure summarizer
+
+Run the interactive setup wizard to configure your preferred providers and models:
+
+[source,bash]
+----
+summarizer init
+----
+
+The wizard will guide you through:
+
+* Entering API keys for providers like OpenRouter or Gemini.
+* Setting up local providers like Ollama (default URL: `http://localhost:11434`).
+* Selecting a default model (e.g., `ollama:llama3` or `google:gemini-1.5-flash`).
+
+The configuration is saved to `~/.config/summarizer/config.yaml`.
+
+=== Step 2: Summarize a file
+
+[source,bash]
+----
+summarizer report.txt
+----
+
+The summary is printed to standard output.
+
+=== Step 3: Try a custom prompt
+
+[source,bash]
+----
+summarizer -p "Extract all action items as a numbered list." meeting_notes.txt
+----
+
+=== Step 4: Summarize multiple files
+
+`summarizer` accepts any number of files. Files that exceed the context window are processed in batches automatically:
+
+[source,bash]
+----
+summarizer chapter1.txt chapter2.txt chapter3.txt chapter4.txt
+----
+
+Progress is printed to standard error so you can pipe the final output cleanly:
+
+[source,bash]
+----
+summarizer *.txt > summary.txt
+----
+
+=== Step 5: Summarize from Stdin
+
+You can also pipe content directly into `summarizer`:
+
+[source,bash]
+----
+cat report.txt | summarizer
+----

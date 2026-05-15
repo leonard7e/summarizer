@@ -30,8 +30,8 @@ On Unix systems the file is saved with permissions `0600` (readable only by the 
 
 [source,yaml]
 ----
-default_model: ollama/llama3
-max_output_tokens: 2048
+default_model: google:gemini-1.5-flash
+max_output_tokens: 4096
 
 providers:
   gemini:
@@ -42,11 +42,15 @@ providers:
 
   ollama:
     base_url: "http://localhost:11434"
-    num_ctx: 4096
+    num_ctx: 8192
 
   openai-compatible:
-    api_key: "sk-..."
-    base_url: "http://localhost:8080/v1"
+    - name: "my-local-server"
+      api_key: "sk-..."
+      base_url: "http://localhost:8080/v1"
+    - name: "another-provider"
+      api_key: "sk-..."
+      base_url: "https://api.example.com/v1"
 ----
 
 === Field Reference
@@ -60,13 +64,25 @@ providers:
 | `default_model`
 | string (optional)
 | —
-| The model used when `--model` is not specified on the command line. Format: `provider/model_id`.
+| The model used when `--model` is not specified on the command line. Format: `provider:model_id`.
 
 | `max_output_tokens`
 | integer
-| `2048`
-| Number of tokens reserved for the model's output in each request. The remaining context window is available for the instruction, previous result, and file content.
+| `4096`
+| Number of tokens reserved for the model's output in each request.
 |===
+
+[TIP]
+====
+The default value of `4096` was chosen to work well with Ollama's default context window (which we set to `8192` by default). This leaves enough room for the input prompt and file contents.
+
+If your model and hardware allow it (e.g., modern LLMs with 32k+ context), you should significantly increase these values – especially `num_ctx` for Ollama – (e.g., to `16384` or `32768`) to process even very long documents without truncation or information loss.
+====
+
+[CAUTION]
+====
+The `max_output_tokens` value is critical. It defines the maximum length of the summary generated in each batch. If this value is too small, the model might be forced to cut off the response, leading to **significant information loss**.
+====
 
 ==== `providers.gemini`
 
@@ -105,20 +121,27 @@ providers:
 
 | `num_ctx`
 | integer
-| `4096`
-| Context window size to request from Ollama. Larger values consume more VRAM but allow more content per batch.
+| `8192`
+| Context window size to request from Ollama.
 |===
 
 ==== `providers.openai-compatible`
+
+This is a list of providers. Each entry requires:
 
 [cols="1,1,1,3", options="header"]
 |===
 | Field | Type | Default | Description
 
+| `name`
+| string
+| —
+| A unique name for this provider. Used as the prefix in the model ID (e.g., `my-local-server:llama3`).
+
 | `api_key`
 | string
 | —
-| API key for the endpoint. May be an arbitrary string for endpoints that do not enforce authentication.
+| API key for the endpoint.
 
 | `base_url`
 | string
@@ -128,16 +151,16 @@ providers:
 
 === Managing the Configuration
 
-Use the built-in subcommands to manage the configuration interactively without editing the YAML file directly:
+Use the built-in subcommands to manage the configuration interactively:
 
 [source,bash]
 ----
-# Full setup wizard (creates or overwrites the file)
+# Full setup wizard
 summarizer init
 
 # Change only the default model
 summarizer default-model
 
-# Check which models are currently reachable
+# Check reachable models
 summarizer list-models
 ----

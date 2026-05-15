@@ -44,21 +44,27 @@ summarizer --model ollama:llama3 notes.txt
 
 ## Documentation
 
-Full documentation is available in [`doc/`](doc/summarizer.adoc).
+* **[User Manual](doc/user_manual.adoc)** — Installation, Quick Start, and Configuration.
+* **[Development Manual](doc/development_manual.adoc)** — Architecture and Development Guidelines.
 
-To build a single-page HTML:
-
-```bash
-asciidoctor doc/summarizer.adoc -D doc/out/
-```
-
-To build a PDF:
+To build the manuals as HTML:
 
 ```bash
-asciidoctor-pdf doc/summarizer.adoc -D doc/out/
+# User Manual
+asciidoctor doc/user_manual.adoc -D doc/out/
+
+# Development Manual
+asciidoctor doc/development_manual.adoc -D doc/out/
 ```
 
-Install the tools once with: `gem install asciidoctor asciidoctor-pdf`
+To build as PDF:
+
+```bash
+asciidoctor-pdf doc/user_manual.adoc -D doc/out/
+asciidoctor-pdf doc/development_manual.adoc -D doc/out/
+```
+
+Install the tools with: `gem install asciidoctor asciidoctor-pdf`
 
 ## Supported Providers
 
@@ -67,11 +73,11 @@ Install the tools once with: `gem install asciidoctor asciidoctor-pdf`
 | Google Gemini | `google:gemini-1.5-flash` | API key |
 | OpenRouter | `openrouter:<model-id>` | API key |
 | Ollama | `ollama:<model-name>` | Local Ollama instance |
-| OpenAI-compatible | `openai-compatible:<model>` | API key + base URL |
+| OpenAI-compatible | `<name>:<model>` | API key + base URL |
 
 ## Configuration
 
-The configuration file is stored at `~/.config/summarizer/config.yaml` (Linux/macOS) and is created automatically on first run. See [`doc/05_configuration.adoc`](doc/05_configuration.adoc) for the full field reference.
+The configuration file is stored at `~/.config/summarizer/config.yaml` (Linux/macOS) and is created automatically on first run. See the [User Manual](doc/user_manual.adoc#configuration) for the full field reference.
 
 ## License
 

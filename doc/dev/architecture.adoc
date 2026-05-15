@@ -1,0 +1,73 @@
+[[architecture]]
+== Architecture
+
+This chapter explains the internal mechanics of `summarizer` — how it handles files, calculates the token budget, and builds prompts.
+
+=== High-Level Flow
+
+[source]
+----
+  CLI args & config
+        │
+        ▼
+  ┌─────────────────┐
+  │  Parse model ID │  "google:gemini-1.5-flash"  →  provider="google", model="gemini-1.5-flash"
+  └────────┬────────┘
+           │
+           ▼
+  ┌─────────────────────────┐
+  │  Query context window   │  GET /models  →  api_limit (tokens)
+  └────────┬────────────────┘
+           │
+           ▼
+  ┌──────────────────────────────────────────┐
+  │  Batch files                             │
+  │  • Estimate file size / token cost       │
+  │  • Group files until budget is exhausted │
+  │  • Start a new batch when full           │
+  └────────┬─────────────────────────────────┘
+           │
+           ▼
+  ┌──────────────────────────────────────────┐     ┌────────────────────┐
+  │  For each batch:                         │────▶│  LLM API call      │
+  │    build_prompt(instruction,             │     │  provider.complete()│
+  │                 files,                   │◀────│  → new_result      │
+  │                 previous_result)         │     └────────────────────┘
+  └────────┬─────────────────────────────────┘
+           │  previous_result = new_result
+           │  (next iteration)
+           ▼
+  ┌─────────────────┐
+  │  Print result   │  stdout
+  └─────────────────┘
+----
+
+=== Token Budget Calculation
+
+Before every batch, the available budget for file content is computed:
+
+[source]
+----
+file_budget (tokens) = api_limit
+                       - instruction_tokens
+                       - previous_result_tokens
+                       - max_output_tokens
+                       - OVERHEAD_TOKENS
+----
+
+[IMPORTANT]
+====
+A small `max_output_tokens` can lead to truncated summaries if the model needs more space to summarize the current batch.
+====
+
+=== Multimodal Support
+
+`summarizer` supports text, images, audio, and video.
+- **Images**: Sent as base64-encoded data.
+- **Audio/Video**: Token cost is estimated based on duration if the provider doesn't support direct upload, or handled via provider-specific APIs (like Gemini's file API).
+
+=== Prompt Construction
+
+The prompt is constructed as a sequence of `PromptPart` items (Text, Image, Audio, Video).
+For text files, it includes metadata:
+`--- Datei: <filename> (Encoding: utf-8) ---`

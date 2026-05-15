@@ -1,0 +1,23 @@
+= summarizer User Manual
+:author: summarizer contributors
+:revnumber: 0.1.0
+:toc: left
+:toclevels: 3
+:sectnums:
+:source-highlighter: rouge
+:icons: font
+:imagesdir: ../images
+
+A command-line tool that iteratively summarizes multiple text files and media using large language models (LLMs).
+
+include::user/introduction.adoc[]
+
+include::user/installation.adoc[]
+
+include::user/quickstart.adoc[]
+
+include::user/usage.adoc[]
+
+include::user/configuration.adoc[]
+
+include::user/providers.adoc[]

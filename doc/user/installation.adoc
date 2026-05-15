@@ -8,8 +8,6 @@
 * *OpenSSL* (Linux) — required by `reqwest` for HTTPS connections. +
   On Debian/Ubuntu: `sudo apt install pkg-config libssl-dev` +
   On Fedora/RHEL: `sudo dnf install openssl-devel`
-* *Ollama* (optional) — only needed if you want to use local models.
-  See https://ollama.com[ollama.com].
 
 === Build from Source
 

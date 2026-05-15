@@ -7,7 +7,7 @@ pub struct Config {
     pub default_model: Option<String>,
     /// How many tokens to reserve for the model's output response.
     /// The remaining context window is available for input (instruction +
-    /// previous result + file contents). Defaults to 2048.
+    /// previous result + file contents). Defaults to 4096.
     #[serde(default = "default_max_output_tokens")]
     pub max_output_tokens: usize,
     #[serde(default)]
@@ -15,7 +15,7 @@ pub struct Config {
 }
 
 fn default_max_output_tokens() -> usize {
-    2048
+    4096
 }
 
 impl Default for Config {
@@ -67,7 +67,7 @@ fn default_ollama_base_url() -> String {
 }
 
 fn default_ollama_num_ctx() -> usize {
-    4096
+    8192
 }
 
 impl Default for OllamaConfig {
@@ -127,7 +127,7 @@ mod tests {
     fn test_config_defaults() {
         let config = Config::default();
         assert!(config.default_model.is_none());
-        assert_eq!(config.max_output_tokens, 2048);
+        assert_eq!(config.max_output_tokens, 4096);
     }
 
     #[test]

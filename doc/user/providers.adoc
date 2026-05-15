@@ -1,0 +1,84 @@
+[[providers]]
+== Providers
+
+A _provider_ is a backend that `summarizer` uses to send prompts and receive completions.
+Providers are selected by the prefix in the model identifier (`provider:model_id`).
+
+=== Google Gemini
+
+The `google` (alias: `gemini`) provider uses the https://ai.google.dev/[Google Gemini API].
+
+==== Setup
+
+1. Create an API key at https://aistudio.google.com/[Google AI Studio].
+2. Add the key to your configuration via `summarizer init` or manually.
+
+==== Model Format
+
+`google:<model-id>`
+
+.Examples
+[source,bash]
+----
+summarizer --model google:gemini-1.5-flash document.txt
+----
+
+---
+
+=== OpenRouter
+
+The `openrouter` provider gives access to hundreds of models through a single API key.
+
+==== Setup
+
+1. Create an account at https://openrouter.ai[openrouter.ai].
+2. Add the key to your configuration.
+
+==== Model Format
+
+`openrouter:<openrouter-model-id>`
+
+---
+
+=== Ollama (Local)
+
+The `ollama` provider runs models locally with no API key required.
+
+==== Setup
+
+1. Install Ollama: https://ollama.com[ollama.com]
+2. Pull a model: `ollama pull llama3`
+3. Configure the `base_url` in `config.yaml` (default is `http://localhost:11434`).
+
+==== Model Format
+
+`ollama:<model-name>`
+
+---
+
+=== OpenAI-Compatible
+
+You can configure multiple OpenAI-compatible providers. Each must have a unique `name`.
+
+==== Setup
+
+Add entries to the `openai-compatible` list in your configuration:
+
+[source,yaml]
+----
+providers:
+  openai-compatible:
+    - name: "my-provider"
+      api_key: "sk-..."
+      base_url: "http://localhost:8080/v1"
+----
+
+==== Model Format
+
+`<name>:<model-id>`
+
+.Example
+[source,bash]
+----
+summarizer --model my-provider:llama3 document.txt
+----
