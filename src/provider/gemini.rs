@@ -32,6 +32,8 @@ impl GeminiProvider {
 
 #[derive(Serialize)]
 struct GeminiRequest {
+    #[serde(rename = "systemInstruction", skip_serializing_if = "Option::is_none")]
+    system_instruction: Option<GeminiContent>,
     contents: Vec<GeminiContent>,
 }
 
@@ -72,7 +74,7 @@ struct GeminiError {
 
 #[async_trait]
 impl LlmProvider for GeminiProvider {
-    async fn complete(&self, prompt_parts: &[PromptPart], model: &str) -> Result<String> {
+    async fn complete(&self, system_instruction: &str, prompt_parts: &[PromptPart], model: &str) -> Result<String> {
         let url = format!(
             "{}/v1beta/models/{}:generateContent?key={}",
             self.base_url, model, self.api_key
@@ -109,7 +111,19 @@ impl LlmProvider for GeminiProvider {
             })
             .collect();
 
+        let sys_instr = if !system_instruction.is_empty() {
+            Some(GeminiContent {
+                parts: vec![GeminiPart {
+                    text: Some(system_instruction.to_string()),
+                    inline_data: None,
+                }],
+            })
+        } else {
+            None
+        };
+
         let req_body = GeminiRequest {
+            system_instruction: sys_instr,
             contents: vec![GeminiContent { parts }],
         };
 
@@ -231,7 +245,7 @@ mod tests {
             .await;
 
         let result = provider
-            .complete(&[PromptPart::Text("Prompt".to_string())], "test-model")
+            .complete("", &[PromptPart::Text("Prompt".to_string())], "test-model")
             .await
             .unwrap();
         assert_eq!(result, "Zusammenfassung");
@@ -262,7 +276,7 @@ mod tests {
             .await;
 
         let result = provider
-            .complete(&[PromptPart::Text("Prompt".to_string())], "test-model")
+            .complete("", &[PromptPart::Text("Prompt".to_string())], "test-model")
             .await;
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();

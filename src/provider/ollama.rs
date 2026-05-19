@@ -31,6 +31,8 @@ struct OllamaRequest<'a> {
     model: &'a str,
     prompt: String,
     #[serde(skip_serializing_if = "Option::is_none")]
+    system: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
     images: Option<Vec<String>>,
     stream: bool,
     options: OllamaOptions,
@@ -55,7 +57,7 @@ struct OllamaResponse {
 
 #[async_trait]
 impl LlmProvider for OllamaProvider {
-    async fn complete(&self, prompt_parts: &[PromptPart], model: &str) -> Result<String> {
+    async fn complete(&self, system_instruction: &str, prompt_parts: &[PromptPart], model: &str) -> Result<String> {
         let (prompt_text, images): (String, Vec<String>) =
             prompt_parts
                 .iter()
@@ -70,9 +72,12 @@ impl LlmProvider for OllamaProvider {
 
         let images_opt = (!images.is_empty()).then_some(images);
 
+        let sys_opt = (!system_instruction.is_empty()).then(|| system_instruction.to_string());
+
         let req_body = OllamaRequest {
             model,
             prompt: prompt_text,
+            system: sys_opt,
             images: images_opt,
             stream: false,
             options: OllamaOptions {
@@ -198,7 +203,7 @@ mod tests {
             .await;
 
         let result = provider
-            .complete(&[PromptPart::Text("Prompt".to_string())], "test-model")
+            .complete("", &[PromptPart::Text("Prompt".to_string())], "test-model")
             .await
             .unwrap();
         assert_eq!(result, "Ollama Zusammenfassung");
@@ -219,7 +224,7 @@ mod tests {
             .await;
 
         let result = provider
-            .complete(&[PromptPart::Text("Prompt".to_string())], "test-model")
+            .complete("", &[PromptPart::Text("Prompt".to_string())], "test-model")
             .await;
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();

@@ -42,7 +42,7 @@ pub const DEFAULT_CONTEXT_LIMIT: usize = 8192;
 /// Common trait implemented by all language model providers to standardize interactions.
 #[async_trait]
 pub trait LlmProvider {
-    async fn complete(&self, prompt: &[PromptPart], model: &str) -> Result<String>;
+    async fn complete(&self, system_instruction: &str, user_parts: &[PromptPart], model: &str) -> Result<String>;
 
     async fn list_models(&self) -> Result<Vec<String>>;
 

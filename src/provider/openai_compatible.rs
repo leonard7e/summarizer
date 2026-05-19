@@ -98,7 +98,7 @@ struct ApiError {
 
 #[async_trait]
 impl LlmProvider for OpenAiCompatibleProvider {
-    async fn complete(&self, prompt_parts: &[PromptPart], model: &str) -> Result<String> {
+    async fn complete(&self, system_instruction: &str, prompt_parts: &[PromptPart], model: &str) -> Result<String> {
         let content_parts: Vec<OpenAiContentPart> = prompt_parts
             .iter()
             .map(|p| match p {
@@ -122,10 +122,19 @@ impl LlmProvider for OpenAiCompatibleProvider {
             })
             .collect();
 
-        let messages = vec![Message {
+        let mut messages = Vec::new();
+        if !system_instruction.is_empty() {
+            messages.push(Message {
+                role: "system",
+                content: vec![OpenAiContentPart::Text {
+                    text: system_instruction.to_string(),
+                }],
+            });
+        }
+        messages.push(Message {
             role: "user",
             content: content_parts,
-        }];
+        });
 
         let req_body = ChatCompletionRequest { model, messages };
 
@@ -292,7 +301,7 @@ mod tests {
             .await;
 
         let result = provider
-            .complete(&[PromptPart::Text("Prompt".to_string())], "test-model")
+            .complete("", &[PromptPart::Text("Prompt".to_string())], "test-model")
             .await
             .unwrap();
         assert_eq!(result, "Compatible Zusammenfassung");
@@ -320,7 +329,7 @@ mod tests {
             .await;
 
         let result = provider
-            .complete(&[PromptPart::Text("Prompt".to_string())], "test-model")
+            .complete("", &[PromptPart::Text("Prompt".to_string())], "test-model")
             .await;
         assert!(result.is_err());
         let err_msg = result.unwrap_err().to_string();
