@@ -90,7 +90,132 @@ impl MediaCategory {
     }
 }
 
-fn get_media_duration(data: &[u8]) -> f64 {
+pub fn compress_image(data: &[u8], max_px: u32, quality: u8) -> Result<Vec<u8>> {
+    use image::ImageReader;
+    use std::io::Cursor;
+
+    let img = ImageReader::new(Cursor::new(data))
+        .with_guessed_format()?
+        .decode()?;
+
+    let (width, height) = (img.width(), img.height());
+    let resized = if width > max_px || height > max_px {
+        let nwidth = if width > height {
+            max_px
+        } else {
+            (width as f64 * (max_px as f64 / height as f64)) as u32
+        };
+        let nheight = if height > width {
+            max_px
+        } else {
+            (height as f64 * (max_px as f64 / width as f64)) as u32
+        };
+        img.resize(nwidth, nheight, image::imageops::FilterType::Lanczos3)
+    } else {
+        img
+    };
+
+    let mut out = Vec::new();
+    let mut cursor = Cursor::new(&mut out);
+    let jpeg_encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut cursor, quality);
+    resized.write_with_encoder(jpeg_encoder)?;
+    Ok(out)
+}
+
+pub async fn compress_audio_ffmpeg(
+    data: &[u8],
+    ext: &str,
+    ffmpeg: &str,
+    bitrate: Option<&str>,
+    mono: bool,
+    sample_rate: Option<u32>,
+) -> Result<Vec<u8>> {
+    use std::io::Write;
+    use tokio::process::Command;
+
+    let mut input_temp = tempfile::Builder::new()
+        .prefix("sum_audio_in_")
+        .suffix(&format!(".{}", ext))
+        .tempfile()?;
+    input_temp.write_all(data)?;
+
+    let output_temp = tempfile::Builder::new()
+        .prefix("sum_audio_out_")
+        .suffix(".mp3")
+        .tempfile()?;
+
+    let mut cmd = Command::new(ffmpeg);
+    cmd.arg("-y").arg("-i").arg(input_temp.path());
+
+    if mono {
+        cmd.arg("-ac").arg("1");
+    }
+    if let Some(br) = bitrate {
+        cmd.arg("-b:a").arg(br);
+    }
+    if let Some(sr) = sample_rate {
+        cmd.arg("-ar").arg(sr.to_string());
+    }
+
+    cmd.arg(output_temp.path());
+
+    let status = cmd.status().await?;
+    if !status.success() {
+        return Err(anyhow!("ffmpeg failed with status: {:?}", status.code()));
+    }
+
+    let out_data = fs::read(output_temp.path()).await?;
+    Ok(out_data)
+}
+
+pub async fn compress_video_ffmpeg(
+    data: &[u8],
+    ext: &str,
+    ffmpeg: &str,
+    max_height: Option<u32>,
+    video_bitrate: Option<&str>,
+    audio_bitrate: Option<&str>,
+) -> Result<Vec<u8>> {
+    use std::io::Write;
+    use tokio::process::Command;
+
+    let mut input_temp = tempfile::Builder::new()
+        .prefix("sum_video_in_")
+        .suffix(&format!(".{}", ext))
+        .tempfile()?;
+    input_temp.write_all(data)?;
+
+    let output_temp = tempfile::Builder::new()
+        .prefix("sum_video_out_")
+        .suffix(".mp4")
+        .tempfile()?;
+
+    let mut cmd = Command::new(ffmpeg);
+    cmd.arg("-y").arg("-i").arg(input_temp.path());
+
+    if let Some(h) = max_height {
+        // scale=-2:height ensures even width is computed, maintaining ratio
+        cmd.arg("-vf").arg(format!("scale=-2:{}", h));
+    }
+    if let Some(vbr) = video_bitrate {
+        cmd.arg("-b:v").arg(vbr);
+    }
+    if let Some(abr) = audio_bitrate {
+        cmd.arg("-b:a").arg(abr);
+    }
+
+    cmd.arg(output_temp.path());
+
+    let status = cmd.status().await?;
+    if !status.success() {
+        return Err(anyhow!("ffmpeg failed with status: {:?}", status.code()));
+    }
+
+    let out_data = fs::read(output_temp.path()).await?;
+    Ok(out_data)
+}
+
+pub fn get_media_duration(data: &[u8]) -> f64 {
     use std::io::Cursor;
     use symphonia::core::formats::FormatOptions;
     use symphonia::core::io::{MediaSourceStream, ReadOnlySource};

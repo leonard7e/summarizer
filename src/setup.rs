@@ -95,12 +95,33 @@ pub async fn run_initialization() -> Result<()> {
         .allow_empty(true)
         .interact_text()?;
 
+    let ffmpeg_detected = detect_ffmpeg();
+    let ffmpeg_prompt = match &ffmpeg_detected {
+        Some(path) => format!("ffmpeg executable path (leave empty to skip, press Enter for auto-detected: {})", path),
+        None => "ffmpeg executable path for audio/video compression (leave empty to skip)".to_string(),
+    };
+
+    let mut ffmpeg_path: String = Input::new()
+        .with_prompt(&ffmpeg_prompt)
+        .allow_empty(true)
+        .interact_text()?;
+
+    if ffmpeg_path.is_empty() {
+        if let Some(path) = ffmpeg_detected {
+            ffmpeg_path = path;
+        }
+    }
+
     let ollama_base_url: String = Input::new()
         .with_prompt("Ollama Base URL")
         .default("http://localhost:11434".to_string())
         .interact_text()?;
 
     let mut config = Config::default();
+
+    if !ffmpeg_path.is_empty() {
+        config.ffmpeg_path = Some(ffmpeg_path);
+    }
 
     if !openrouter_key.is_empty() {
         config.providers.openrouter = Some(OpenRouterConfig {
@@ -155,4 +176,17 @@ pub async fn run_initialization() -> Result<()> {
 
     println!("Initialization completed successfully.");
     Ok(())
+}
+
+fn detect_ffmpeg() -> Option<String> {
+    #[cfg(windows)]
+    let cmd = std::process::Command::new("where").arg("ffmpeg").output();
+    #[cfg(not(windows))]
+    let cmd = std::process::Command::new("which").arg("ffmpeg").output();
+
+    cmd.ok()
+        .filter(|o| o.status.success())
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.lines().next().unwrap_or("").trim().to_string())
+        .filter(|s| !s.is_empty())
 }

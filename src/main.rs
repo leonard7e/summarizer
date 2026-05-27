@@ -76,16 +76,23 @@ async fn main() -> Result<()> {
                 .map(|f| std::fs::read_to_string(&f))
                 .transpose()?;
 
-            // Combine prompt from file and CLI argument, falling back to a default instruction if neither is provided.
             let final_prompt = file_prompt
                 .into_iter()
                 .chain(cli.prompt)
                 .reduce(|a, b| format!("{}\n\n{}", a, b))
                 .unwrap_or_else(|| {
-                    "Please summarize the following text comprehensively.".to_string()
+                     "Please summarize the following text comprehensively.".to_string()
                 });
 
-            engine::run_summarize_loop(files, config, &model_str, cli.debug, &final_prompt).await
+            engine::run_summarize_loop(
+                files,
+                config,
+                &model_str,
+                cli.debug,
+                &final_prompt,
+                cli.compress_media,
+            )
+            .await
         }
     }
 }

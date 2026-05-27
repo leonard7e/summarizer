@@ -26,6 +26,11 @@ pub struct Cli {
     /// Show debug information
     #[arg(long)]
     pub debug: bool,
+
+    /// Compress images, audio and video before sending to LLM.
+    /// Image scaling is always active if configured. Audio/video compression requires ffmpeg_path.
+    #[arg(long)]
+    pub compress_media: bool,
 }
 
 #[derive(Subcommand)]

@@ -192,6 +192,7 @@ pub async fn run_summarize_loop(
     model_str: &str,
     debug: bool,
     instruction: &str,
+    compress_media: bool,
 ) -> Result<()> {
     if files.is_empty() {
         return Err(anyhow!("No files provided."));
@@ -204,6 +205,21 @@ pub async fn run_summarize_loop(
         eprintln!("--- Debug Info ---");
         eprintln!("Provider: {}", model_id.provider);
         eprintln!("Model:    {}", model_id.model);
+    }
+
+    // Verify ffmpeg configuration upfront if audio/video compression is requested
+    let has_media_requiring_ffmpeg = files.iter().any(|p| {
+        let ext = p.extension().and_then(|e| e.to_str()).unwrap_or("").to_lowercase();
+        // matches audio or video categories
+        matches!(ext.as_str(), "mp3" | "wav" | "flac" | "ogg" | "m4a" | "aac" | "mp4" | "mov" | "webm" | "avi" | "mpeg" | "mpg")
+    });
+
+    if compress_media && has_media_requiring_ffmpeg && config.ffmpeg_path.is_none() {
+        return Err(anyhow!(
+            "Compression is enabled (--compress-media), but `ffmpeg_path` is not configured in config.yaml.\n\
+             Audio and video compression require ffmpeg.\n\
+             Please run `summarizer init` to configure it, or manually add `ffmpeg_path: /path/to/ffmpeg` to your config."
+        ));
     }
 
     let api_limit = provider.get_context_limit(&model_id.model).await?;
@@ -272,7 +288,7 @@ pub async fn run_summarize_loop(
             }
 
             match file::read_file(file_path).await {
-                Ok(processed) => {
+                Ok(mut processed) => {
                     // Check multimodal support once per batch/run
                     if matches!(processed.data, FileData::Image(_)) && !images_support_checked {
                         images_support_checked = true;
@@ -298,6 +314,106 @@ pub async fn run_summarize_loop(
                             "The model '{}' does not support video analysis.",
                             model_id.model
                         ));
+                    }
+
+                    // Apply compression if enabled
+                    if compress_media {
+                        let original_size = match &processed.data {
+                            FileData::Image(bytes) => Some(bytes.len()),
+                            FileData::Audio(bytes, _) => Some(bytes.len()),
+                            FileData::Video(bytes, _) => Some(bytes.len()),
+                            FileData::Text(_) => None,
+                        };
+
+                        match &mut processed.data {
+                            FileData::Image(bytes) => {
+                                if let Some(max_px) = config.compression.max_image_size {
+                                    match file::compress_image(bytes, max_px, config.compression.image_quality) {
+                                        Ok(compressed_bytes) => {
+                                            *bytes = compressed_bytes;
+                                            processed.metadata.file_type = FileType::Image {
+                                                mime_type: "image/jpeg".to_string(),
+                                            };
+                                        }
+                                        Err(e) => {
+                                            eprintln!("Warning: Failed to compress image {}: {}", file_path.display(), e);
+                                        }
+                                    }
+                                }
+                            }
+                            FileData::Audio(bytes, duration) => {
+                                if let Some(ffmpeg) = &config.ffmpeg_path {
+                                    let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("mp3");
+                                    match file::compress_audio_ffmpeg(
+                                        bytes,
+                                        ext,
+                                        ffmpeg,
+                                        config.compression.audio_bitrate.as_deref(),
+                                        config.compression.audio_mono,
+                                        config.compression.audio_sample_rate,
+                                    ).await {
+                                        Ok(compressed_bytes) => {
+                                            *bytes = compressed_bytes;
+                                            processed.metadata.file_type = FileType::Audio {
+                                                mime_type: "audio/mpeg".to_string(), // ffmpeg audio compression converts to MP3
+                                            };
+                                            *duration = file::get_media_duration(bytes);
+                                        }
+                                        Err(e) => {
+                                            eprintln!("Warning: Failed to compress audio {}: {}", file_path.display(), e);
+                                        }
+                                    }
+                                }
+                            }
+                            FileData::Video(bytes, duration) => {
+                                if let Some(ffmpeg) = &config.ffmpeg_path {
+                                    let ext = file_path.extension().and_then(|e| e.to_str()).unwrap_or("mp4");
+                                    match file::compress_video_ffmpeg(
+                                        bytes,
+                                        ext,
+                                        ffmpeg,
+                                        config.compression.video_max_height,
+                                        config.compression.video_bitrate.as_deref(),
+                                        config.compression.video_audio_bitrate.as_deref(),
+                                    ).await {
+                                        Ok(compressed_bytes) => {
+                                            *bytes = compressed_bytes;
+                                            processed.metadata.file_type = FileType::Video {
+                                                mime_type: "video/mp4".to_string(), // ffmpeg video compression converts to MP4
+                                            };
+                                            *duration = file::get_media_duration(bytes);
+                                        }
+                                        Err(e) => {
+                                            eprintln!("Warning: Failed to compress video {}: {}", file_path.display(), e);
+                                        }
+                                    }
+                                }
+                            }
+                            FileData::Text(_) => {}
+                        }
+
+                        if debug {
+                            if let Some(orig) = original_size {
+                                let compressed_size = match &processed.data {
+                                    FileData::Image(bytes) => bytes.len(),
+                                    FileData::Audio(bytes, _) => bytes.len(),
+                                    FileData::Video(bytes, _) => bytes.len(),
+                                    FileData::Text(_) => 0,
+                                };
+                                let savings = if orig > 0 {
+                                    100.0 - (compressed_size as f64 / orig as f64 * 100.0)
+                                } else {
+                                    0.0
+                                };
+                                eprintln!(
+                                    "Compression: {} ({} bytes -> {} bytes, {:.1}% saved)",
+                                    file_path.display(),
+                                    orig,
+                                    compressed_size,
+                                    savings
+                                );
+                            }
+                        }
                     }
 
                     let file_cost = estimate_file_cost(&processed);

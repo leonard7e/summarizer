@@ -10,6 +10,9 @@ pub struct Config {
     /// previous result + file contents). Defaults to 4096.
     #[serde(default = "default_max_output_tokens")]
     pub max_output_tokens: usize,
+    pub ffmpeg_path: Option<String>,
+    #[serde(default)]
+    pub compression: CompressionConfig,
     #[serde(default)]
     pub providers: ProvidersConfig,
 }
@@ -18,11 +21,46 @@ fn default_max_output_tokens() -> usize {
     4096
 }
 
+#[derive(Debug, Serialize, Deserialize, Clone)]
+pub struct CompressionConfig {
+    pub max_image_size: Option<u32>,
+    #[serde(default = "default_image_quality")]
+    pub image_quality: u8,
+    pub audio_bitrate: Option<String>,
+    #[serde(default)]
+    pub audio_mono: bool,
+    pub audio_sample_rate: Option<u32>,
+    pub video_max_height: Option<u32>,
+    pub video_bitrate: Option<String>,
+    pub video_audio_bitrate: Option<String>,
+}
+
+fn default_image_quality() -> u8 {
+    85
+}
+
+impl Default for CompressionConfig {
+    fn default() -> Self {
+        Self {
+            max_image_size: Some(1568),
+            image_quality: default_image_quality(),
+            audio_bitrate: Some("64k".to_string()),
+            audio_mono: false,
+            audio_sample_rate: None,
+            video_max_height: Some(720),
+            video_bitrate: Some("500k".to_string()),
+            video_audio_bitrate: Some("64k".to_string()),
+        }
+    }
+}
+
 impl Default for Config {
     fn default() -> Self {
         Self {
             default_model: None,
             max_output_tokens: default_max_output_tokens(),
+            ffmpeg_path: None,
+            compression: CompressionConfig::default(),
             providers: ProvidersConfig::default(),
         }
     }
@@ -128,6 +166,9 @@ mod tests {
         let config = Config::default();
         assert!(config.default_model.is_none());
         assert_eq!(config.max_output_tokens, 4096);
+        assert!(config.ffmpeg_path.is_none());
+        assert_eq!(config.compression.image_quality, 85);
+        assert_eq!(config.compression.audio_mono, false);
     }
 
     #[test]
