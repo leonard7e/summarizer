@@ -251,6 +251,38 @@ fn group_texts_into_batches(texts: Vec<String>, budget_chars: usize) -> Vec<Vec<
     batches
 }
 
+/// Groups a list of file paths into batches where each batch's combined file size
+/// does not exceed `file_budget`. If a file exceeds the budget, it is placed in its
+/// own batch.
+fn create_batches(files: Vec<PathBuf>, file_budget: usize) -> Result<Vec<Vec<PathBuf>>> {
+    let result = files
+        .into_iter()
+        .try_fold(
+            vec![(0_usize, Vec::new())],
+            |mut acc, path| -> Result<Vec<(usize, Vec<PathBuf>)>> {
+                let size = std::fs::metadata(&path)
+                    .map(|m| m.len() as usize)
+                    .unwrap_or(0);
+                let (current_size, batch) = acc
+                    .last_mut()
+                    .ok_or_else(|| anyhow!("Batch accumulator is unexpectedly empty"))?;
+                if !batch.is_empty() && (*current_size + size > file_budget) {
+                    acc.push((size, vec![path]));
+                } else {
+                    *current_size += size;
+                    batch.push(path);
+                }
+                Ok(acc)
+            },
+        )?
+        .into_iter()
+        .map(|(_, batch)| batch)
+        .filter(|batch| !batch.is_empty())
+        .collect();
+
+    Ok(result)
+}
+
 async fn run_linear_mode(
     files: Vec<PathBuf>,
     provider: &dyn LlmProvider,
@@ -269,35 +301,7 @@ async fn run_linear_mode(
     // 1. Convert list of files into list of batches using an iterator.
     //    We use the initial budget here; the per-batch budget is re-evaluated
     //    below once we know the actual previous_result size.
-    let batches: Vec<Vec<PathBuf>> = files
-        .into_iter()
-        .try_fold(
-            vec![(0_usize, Vec::new())],
-            |mut acc, path| -> Result<Vec<(usize, Vec<PathBuf>)>> {
-                // Estimate token usage via file size (bytes ≈ chars for ASCII/UTF-8).
-                // For images we use a rough token estimate based on file size as a proxy
-                // before we read the file, then refine during actual processing.
-                let size = std::fs::metadata(&path)
-                    .map(|m| m.len() as usize)
-                    .unwrap_or(0);
-
-                let (current_size, batch) = acc
-                    .last_mut()
-                    .ok_or_else(|| anyhow!("Batch accumulator is unexpectedly empty"))?;
-
-                if !batch.is_empty() && (*current_size + size > initial_file_budget) {
-                    acc.push((size, vec![path]));
-                } else {
-                    *current_size += size;
-                    batch.push(path);
-                }
-                Ok(acc)
-            },
-        )?
-        .into_iter()
-        .map(|(_, batch)| batch)
-        .filter(|batch| !batch.is_empty())
-        .collect();
+    let batches: Vec<Vec<PathBuf>> = create_batches(files, initial_file_budget)?;
 
     let mut previous_result: Option<String> = None;
     let total_files: usize = batches.iter().map(|b| b.len()).sum();
@@ -425,31 +429,8 @@ async fn run_tree_mode(
         );
     }
 
-    // Collect paths into file-size-based batches (reuses existing logic).
-    let path_batches: Vec<Vec<PathBuf>> = files
-        .into_iter()
-        .try_fold(
-            vec![(0_usize, Vec::new())],
-            |mut acc, path| -> Result<Vec<(usize, Vec<PathBuf>)>> {
-                let size = std::fs::metadata(&path)
-                    .map(|m| m.len() as usize)
-                    .unwrap_or(0);
-                let (current_size, batch) = acc
-                    .last_mut()
-                    .ok_or_else(|| anyhow!("Batch accumulator is unexpectedly empty"))?;
-                if !batch.is_empty() && (*current_size + size > file_budget) {
-                    acc.push((size, vec![path]));
-                } else {
-                    *current_size += size;
-                    batch.push(path);
-                }
-                Ok(acc)
-            },
-        )?
-        .into_iter()
-        .map(|(_, batch)| batch)
-        .filter(|batch| !batch.is_empty())
-        .collect();
+    // Collect paths into file-size-based batches.
+    let path_batches: Vec<Vec<PathBuf>> = create_batches(files, file_budget)?;
 
     let total_batches_l0 = path_batches.len();
 
