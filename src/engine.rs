@@ -4,7 +4,6 @@ use crate::file::{self, FileData, FileType, ProcessedFile};
 use crate::provider::{LlmProvider, ModelId, PromptPart, create_provider};
 use anyhow::{Result, anyhow};
 use std::path::PathBuf;
-use symphonia::core::codecs::FinalizeResult;
 
 /// Rough chars-per-token ratio for typical UTF-8 prose / code.
 const CHARS_PER_TOKEN: usize = 4;
@@ -250,6 +249,48 @@ fn group_texts_into_batches(texts: Vec<String>, budget_chars: usize) -> Vec<Vec<
 
     batches
 }
+
+/// Helper to clamp `max_output_tokens` when it exceeds the model's context window
+/// or leaves less than 1024 tokens for input.
+fn clamp_max_output_tokens(max_output: usize, api_limit: usize) -> usize {
+    if max_output >= api_limit {
+        let new_max = api_limit / 2;
+        eprintln!(
+            "Warning: Configured max_output_tokens ({}) is greater than or equal to the model's context limit ({}). \
+             Clamping max_output_tokens to {} tokens to allow space for input.",
+            max_output, api_limit, new_max
+        );
+        new_max
+    } else if api_limit.saturating_sub(max_output) < 1024 {
+        let new_max = api_limit.saturating_sub(1024).max(api_limit / 2);
+        eprintln!(
+            "Warning: Configured max_output_tokens ({}) leaves too little space for input in the context window ({}). \
+             Clamping max_output_tokens to {} tokens.",
+            max_output, api_limit, new_max
+        );
+        new_max
+    } else {
+        max_output
+    }
+}
+
+/// Fallback to forced pair-wise batching of texts to guarantee progress
+/// and tree reduction when budget constraints are too tight.
+fn force_pairwise_grouping(texts: Vec<String>) -> Vec<Vec<String>> {
+    let mut forced_batches = Vec::new();
+    let mut iter = texts.into_iter();
+    while let Some(first) = iter.next() {
+        if let Some(second) = iter.next() {
+            forced_batches.push(vec![first, second]);
+        } else if let Some(last_batch) = forced_batches.last_mut() {
+            last_batch.push(first);
+        } else {
+            forced_batches.push(vec![first]);
+        }
+    }
+    forced_batches
+}
+
 
 /// Groups a list of file paths into batches where each batch's combined file size
 /// does not exceed `file_budget`. If a file exceeds the budget, it is placed in its
@@ -528,9 +569,20 @@ async fn run_tree_mode(
     // ── Level 1+: iteratively merge text results ─────────────────────────────
     let mut level = 1_usize;
     while current_results.len() > 1 {
+        let num_results = current_results.len();
         let text_budget =
             compute_file_budget(api_limit, config.max_output_tokens, instruction, None);
-        let batches = group_texts_into_batches(current_results, text_budget);
+        let mut batches = group_texts_into_batches(current_results, text_budget);
+
+        if batches.len() >= num_results && num_results > 1 {
+            eprintln!(
+                "Warning: Budget of {} chars is too small to group multiple summaries. \
+                 Forcing pairwise merging to ensure tree reduction and prevent infinite loop.",
+                text_budget
+            );
+            let texts: Vec<String> = batches.into_iter().flatten().collect();
+            batches = force_pairwise_grouping(texts);
+        }
         let total_batches = batches.len();
 
         if debug {
@@ -599,6 +651,8 @@ pub async fn run_summarize_loop(
     }
 
     let api_limit = provider.get_context_limit(&model_id.model).await?;
+    let mut config = config;
+    config.max_output_tokens = clamp_max_output_tokens(config.max_output_tokens, api_limit);
 
     if debug {
         eprintln!("Context Window: {} tokens", api_limit);
@@ -638,4 +692,78 @@ pub async fn run_summarize_loop(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_force_pairwise_grouping() {
+        // Empty
+        let empty: Vec<String> = Vec::new();
+        assert!(force_pairwise_grouping(empty).is_empty());
+
+        // 1 element
+        let one = vec!["A".to_string()];
+        assert_eq!(force_pairwise_grouping(one), vec![vec!["A".to_string()]]);
+
+        // 2 elements
+        let two = vec!["A".to_string(), "B".to_string()];
+        assert_eq!(
+            force_pairwise_grouping(two),
+            vec![vec!["A".to_string(), "B".to_string()]]
+        );
+
+        // 3 elements
+        let three = vec!["A".to_string(), "B".to_string(), "C".to_string()];
+        assert_eq!(
+            force_pairwise_grouping(three),
+            vec![vec!["A".to_string(), "B".to_string(), "C".to_string()]]
+        );
+
+        // 4 elements
+        let four = vec![
+            "A".to_string(),
+            "B".to_string(),
+            "C".to_string(),
+            "D".to_string(),
+        ];
+        assert_eq!(
+            force_pairwise_grouping(four),
+            vec![
+                vec!["A".to_string(), "B".to_string()],
+                vec!["C".to_string(), "D".to_string()]
+            ]
+        );
+
+        // 5 elements
+        let five = vec![
+            "A".to_string(),
+            "B".to_string(),
+            "C".to_string(),
+            "D".to_string(),
+            "E".to_string(),
+        ];
+        assert_eq!(
+            force_pairwise_grouping(five),
+            vec![
+                vec!["A".to_string(), "B".to_string()],
+                vec!["C".to_string(), "D".to_string(), "E".to_string()]
+            ]
+        );
+    }
+
+    #[test]
+    fn test_clamp_max_output_tokens() {
+        // Safe values: no changes
+        assert_eq!(clamp_max_output_tokens(4096, 8192), 4096);
+
+        // max_output >= api_limit: clamp to api_limit / 2
+        assert_eq!(clamp_max_output_tokens(16000, 12288), 6144);
+        assert_eq!(clamp_max_output_tokens(8192, 8192), 4096);
+
+        // Too little input space left (< 1024): clamp to api_limit - 1024 (or api_limit/2 if higher)
+        assert_eq!(clamp_max_output_tokens(7500, 8192), 7168);
+    }
 }
