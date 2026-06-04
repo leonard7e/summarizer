@@ -283,6 +283,63 @@ fn create_batches(files: Vec<PathBuf>, file_budget: usize) -> Result<Vec<Vec<Pat
     Ok(result)
 }
 
+/// Checks that the model supports the media type of `processed`.
+/// The `images_support_checked` flag avoids a redundant API call for
+/// subsequent image files (images are checked only once).
+async fn check_file_media_support(
+    processed: &ProcessedFile,
+    provider: &dyn LlmProvider,
+    model: &str,
+    images_support_checked: &mut bool,
+) -> Result<()> {
+    match &processed.data {
+        FileData::Image(_) if !*images_support_checked => {
+            *images_support_checked = true;
+            if !provider.supports_images(model).await? {
+                return Err(anyhow!(
+                    "The model '{}' does not support image analysis.",
+                    model
+                ));
+            }
+        }
+        FileData::Audio(_, _) => {
+            if !provider.supports_audio(model).await? {
+                return Err(anyhow!(
+                    "The model '{}' does not support audio analysis.",
+                    model
+                ));
+            }
+        }
+        FileData::Video(_, _) => {
+            if !provider.supports_video(model).await? {
+                return Err(anyhow!(
+                    "The model '{}' does not support video analysis.",
+                    model
+                ));
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+/// Fires one LLM completion per entry in `prompts` concurrently and collects
+/// the results, propagating the first error encountered.
+async fn complete_all(
+    prompts: &[(String, Vec<PromptPart>)],
+    provider: &dyn LlmProvider,
+    model: &str,
+) -> Result<Vec<String>> {
+    let futures: Vec<_> = prompts
+        .iter()
+        .map(|(sys, usr)| provider.complete(sys, usr, model))
+        .collect();
+    futures::future::join_all(futures)
+        .await
+        .into_iter()
+        .collect()
+}
+
 async fn run_linear_mode(
     files: Vec<PathBuf>,
     provider: &dyn LlmProvider,
@@ -298,20 +355,17 @@ async fn run_linear_mode(
     let initial_file_budget =
         compute_file_budget(api_limit, config.max_output_tokens, instruction, None);
 
-    // 1. Convert list of files into list of batches using an iterator.
-    //    We use the initial budget here; the per-batch budget is re-evaluated
-    //    below once we know the actual previous_result size.
+    // Convert the file list into size-bounded batches. The per-batch budget is
+    // re-evaluated below once we know the actual previous_result size.
     let batches: Vec<Vec<PathBuf>> = create_batches(files, initial_file_budget)?;
 
-    let mut previous_result: Option<String> = None;
     let total_files: usize = batches.iter().map(|b| b.len()).sum();
+    let mut previous_result: Option<String> = None;
     let mut processed_count = 0;
     let mut images_support_checked = false;
 
-    // 2. Process each batch
     for (batch_idx, batch_paths) in batches.iter().enumerate() {
         let mut current_batch: Vec<ProcessedFile> = Vec::new();
-        let mut batch_cost = 0;
 
         for file_path in batch_paths {
             processed_count += 1;
@@ -323,37 +377,16 @@ async fn run_linear_mode(
 
             match file::read_file(file_path).await {
                 Ok(processed) => {
-                    // Check multimodal support once per batch/run
-                    if matches!(processed.data, FileData::Image(_)) && !images_support_checked {
-                        images_support_checked = true;
-                        if !provider.supports_images(&model_id.model).await? {
-                            return Err(anyhow!(
-                                "The model '{}' does not support image analysis.",
-                                model_id.model
-                            ));
-                        }
-                    }
-                    if matches!(processed.data, FileData::Audio(_, _))
-                        && !provider.supports_audio(&model_id.model).await?
-                    {
-                        return Err(anyhow!(
-                            "The model '{}' does not support audio analysis.",
-                            model_id.model
-                        ));
-                    }
-                    if matches!(processed.data, FileData::Video(_, _))
-                        && !provider.supports_video(&model_id.model).await?
-                    {
-                        return Err(anyhow!(
-                            "The model '{}' does not support video analysis.",
-                            model_id.model
-                        ));
-                    }
-
-                    let file_cost = estimate_file_cost(&processed);
-                    batch_cost += file_cost;
+                    check_file_media_support(
+                        &processed,
+                        provider,
+                        &model_id.model,
+                        &mut images_support_checked,
+                    )
+                    .await?;
 
                     if debug {
+                        let file_cost = estimate_file_cost(&processed);
                         eprintln!(
                             "[{}/{}] Adding to batch: {} (~{} tokens)",
                             processed_count,
@@ -370,43 +403,44 @@ async fn run_linear_mode(
             }
         }
 
-        if !current_batch.is_empty() {
-            // Show percentage of completion
-            eprint!("{}% ", (batch_idx * 100) / batches.len());
-
-            if debug {
-                let file_budget = compute_file_budget(
-                    api_limit,
-                    config.max_output_tokens,
-                    instruction,
-                    previous_result.as_deref(),
-                );
-                eprintln!(
-                    "[Batch {}/{}] file budget: {} chars (~{} tokens), batch content: ~{} tokens",
-                    batch_idx + 1,
-                    batches.len(),
-                    file_budget,
-                    file_budget / CHARS_PER_TOKEN,
-                    batch_cost / CHARS_PER_TOKEN,
-                );
-            }
-
-            let (system_prompt, user_prompt) =
-                build_prompt(instruction, &current_batch, previous_result.as_deref());
-            let new_result = provider
-                .complete(&system_prompt, &user_prompt, &model_id.model)
-                .await?;
-            previous_result = Some(new_result);
+        if current_batch.is_empty() {
+            continue;
         }
+
+        // Show percentage of completion
+        eprint!("{}% ", (batch_idx * 100) / batches.len());
+
+        if debug {
+            let file_budget = compute_file_budget(
+                api_limit,
+                config.max_output_tokens,
+                instruction,
+                previous_result.as_deref(),
+            );
+            let batch_cost: usize = current_batch.iter().map(estimate_file_cost).sum();
+            eprintln!(
+                "[Batch {}/{}] file budget: {} chars (~{} tokens), batch content: ~{} tokens",
+                batch_idx + 1,
+                batches.len(),
+                file_budget,
+                file_budget / CHARS_PER_TOKEN,
+                batch_cost / CHARS_PER_TOKEN,
+            );
+        }
+
+        let (system_prompt, user_prompt) =
+            build_prompt(instruction, &current_batch, previous_result.as_deref());
+        previous_result = Some(
+            provider
+                .complete(&system_prompt, &user_prompt, &model_id.model)
+                .await?,
+        );
     }
 
-    // if let Some(final_result) = previous_result {
-    //     println!("{}", final_result);
-    // }
-    previous_result.ok_or(anyhow::anyhow!("No result available"))
+    previous_result.ok_or_else(|| anyhow!("No result available"))
 }
 
-/// Runs tree-mode summarization: processes files into Ebene-0 batches, then
+/// Runs tree-mode summarization: processes files into Level-0 batches, then
 /// iteratively merges the resulting texts level by level until one result remains.
 async fn run_tree_mode(
     files: Vec<PathBuf>,
@@ -429,19 +463,15 @@ async fn run_tree_mode(
         );
     }
 
-    // Collect paths into file-size-based batches.
     let path_batches: Vec<Vec<PathBuf>> = create_batches(files, file_budget)?;
-
     let total_batches_l0 = path_batches.len();
 
     if debug {
         eprintln!("[Tree] Level 0 – {} batch(es)", total_batches_l0);
     }
 
-    // Check multimodal support once (same as linear mode).
-    let mut images_support_checked = false;
-
     // Read all files for Level 0 batches.
+    let mut images_support_checked = false;
     let mut level0_processed: Vec<Vec<ProcessedFile>> = Vec::with_capacity(total_batches_l0);
     for batch_paths in path_batches {
         let mut batch_files: Vec<ProcessedFile> = Vec::new();
@@ -452,31 +482,13 @@ async fn run_tree_mode(
             }
             match file::read_file(file_path).await {
                 Ok(processed) => {
-                    if matches!(processed.data, FileData::Image(_)) && !images_support_checked {
-                        images_support_checked = true;
-                        if !provider.supports_images(&model_id.model).await? {
-                            return Err(anyhow!(
-                                "The model '{}' does not support image analysis.",
-                                model_id.model
-                            ));
-                        }
-                    }
-                    if matches!(processed.data, FileData::Audio(_, _))
-                        && !provider.supports_audio(&model_id.model).await?
-                    {
-                        return Err(anyhow!(
-                            "The model '{}' does not support audio analysis.",
-                            model_id.model
-                        ));
-                    }
-                    if matches!(processed.data, FileData::Video(_, _))
-                        && !provider.supports_video(&model_id.model).await?
-                    {
-                        return Err(anyhow!(
-                            "The model '{}' does not support video analysis.",
-                            model_id.model
-                        ));
-                    }
+                    check_file_media_support(
+                        &processed,
+                        provider,
+                        &model_id.model,
+                        &mut images_support_checked,
+                    )
+                    .await?;
                     batch_files.push(processed);
                 }
                 Err(e) => {
@@ -494,8 +506,8 @@ async fn run_tree_mode(
     }
 
     // ── Process Level 0 concurrently ────────────────────────────────────────
-    let mut current_results: Vec<String> = Vec::new();
     let concurrency = max_concurrency.max(1);
+    let mut current_results: Vec<String> = Vec::new();
 
     for (chunk_idx, chunk) in level0_processed.chunks(concurrency).enumerate() {
         if debug {
@@ -506,22 +518,11 @@ async fn run_tree_mode(
                 chunk.len()
             );
         }
-
-        let mut prompts = Vec::new();
-        for batch_files in chunk {
-            prompts.push(build_prompt(instruction, batch_files, None));
-        }
-
-        let mut futures = Vec::new();
-        for (system_prompt, user_prompt) in &prompts {
-            futures.push(provider.complete(system_prompt, user_prompt, &model_id.model));
-        }
-
-        // Await all futures in the current chunk before proceeding.
-        let chunk_results = futures::future::join_all(futures).await;
-        for result in chunk_results {
-            current_results.push(result?);
-        }
+        let prompts: Vec<_> = chunk
+            .iter()
+            .map(|batch| build_prompt(instruction, batch, None))
+            .collect();
+        current_results.extend(complete_all(&prompts, provider, &model_id.model).await?);
     }
 
     // ── Level 1+: iteratively merge text results ─────────────────────────────
@@ -529,7 +530,6 @@ async fn run_tree_mode(
     while current_results.len() > 1 {
         let text_budget =
             compute_file_budget(api_limit, config.max_output_tokens, instruction, None);
-
         let batches = group_texts_into_batches(current_results, text_budget);
         let total_batches = batches.len();
 
@@ -544,7 +544,6 @@ async fn run_tree_mode(
         }
 
         let mut next_results: Vec<String> = Vec::new();
-
         for (chunk_idx, chunk) in batches.chunks(concurrency).enumerate() {
             if debug {
                 eprintln!(
@@ -555,21 +554,11 @@ async fn run_tree_mode(
                     chunk.len()
                 );
             }
-
-            let mut prompts = Vec::new();
-            for batch_texts in chunk {
-                prompts.push(build_prompt_from_texts(instruction, batch_texts));
-            }
-
-            let mut futures = Vec::new();
-            for (system_prompt, user_prompt) in &prompts {
-                futures.push(provider.complete(system_prompt, user_prompt, &model_id.model));
-            }
-
-            let chunk_results = futures::future::join_all(futures).await;
-            for result in chunk_results {
-                next_results.push(result?);
-            }
+            let prompts: Vec<_> = chunk
+                .iter()
+                .map(|batch| build_prompt_from_texts(instruction, batch))
+                .collect();
+            next_results.extend(complete_all(&prompts, provider, &model_id.model).await?);
         }
 
         current_results = next_results;
