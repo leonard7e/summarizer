@@ -5,8 +5,10 @@
 
 ### Dokumentation
 Es wird strikt unterschieden zwischen:
-* **User-documentation**: Befindet sich in `doc/user_manual.adoc` (Installation, Quickstart, CLI-Bedienung, Konfiguration).
-* **Developer-documentation**: Befindet sich in `doc/development_manual.adoc` (Architektur, interne Details).
+* **User-documentation**: Einstiegspunkt ist `doc/user_manual.adoc` (Installation, Quickstart, CLI-Bedienung, Konfiguration).
+* **Developer-documentation**: Einstiegspunkt ist `doc/development_manual.adoc` (Architektur, interne Details).
+
+**Aufbau**: Die Einstiegsdateien sind minimal zu halten und enthalten ausschließlich AsciiDoc-Attribute und `include::`-Direktiven. Inhalte gehören in thematisch getrennte Dateien unter `doc/user/` bzw. `doc/dev/`. Neue Inhalte niemals direkt in die Einstiegsdatei schreiben — fehlt eine passende Datei, eine neue anlegen und über `include::` einbinden.
 
 ## Code-Qualität (Rust)
 
