@@ -583,9 +583,10 @@ async fn process_level_zero(
         }
     }
 
-    if processed_batches.is_empty() {
-        return Err(anyhow!("No readable files found."));
-    }
+    ensure!(
+        !processed_batches.is_empty(),
+        anyhow!("No readable files found.")
+    );
 
     let concurrency = max_concurrency.max(1);
     let mut results: Vec<String> = Vec::new();

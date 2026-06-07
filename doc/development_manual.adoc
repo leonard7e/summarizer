@@ -13,3 +13,5 @@ This document contains internal details and development guidelines for `summariz
 include::dev/architecture.adoc[]
 
 include::dev/development.adoc[]
+
+include::dev/error_handling.adoc[]

@@ -1,0 +1,8 @@
+[[error-handling]]
+== Error Handling
+
+We prioritize clean, readable error handling.
+
+* Use `Result` and `Option` for error propagation.
+* Use the `anyhow` crate for flexible error types.
+* Prefer `ensure!(condition, error_message)` for simple guard checks instead of `if !condition { return Err(anyhow!(...)); }`.

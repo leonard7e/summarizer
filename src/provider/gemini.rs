@@ -1,5 +1,5 @@
 use super::{LlmProvider, PromptPart};
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, ensure};
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use reqwest::Client;
@@ -74,7 +74,12 @@ struct GeminiError {
 
 #[async_trait]
 impl LlmProvider for GeminiProvider {
-    async fn complete(&self, system_instruction: &str, prompt_parts: &[PromptPart], model: &str) -> Result<String> {
+    async fn complete(
+        &self,
+        system_instruction: &str,
+        prompt_parts: &[PromptPart],
+        model: &str,
+    ) -> Result<String> {
         let url = format!(
             "{}/v1beta/models/{}:generateContent?key={}",
             self.base_url, model, self.api_key
@@ -130,20 +135,25 @@ impl LlmProvider for GeminiProvider {
         let res = self.client.post(&url).json(&req_body).send().await?;
 
         let status = res.status();
-        if !status.is_success() {
-            let error_text = res.text().await.unwrap_or_default();
-            return Err(anyhow!(
+        ensure!(
+            status.is_success(),
+            anyhow!(
                 "Gemini API HTTP Error ({}): {}",
                 status,
-                error_text
-            ));
-        }
+                res.text().await.unwrap_or_default()
+            )
+        );
 
         let resp: GeminiResponse = res.json().await?;
 
-        if let Some(err) = resp.error {
-            return Err(anyhow!("Gemini API Error ({}): {}", status, err.message));
-        }
+        ensure!(
+            resp.error.is_none(),
+            anyhow!(
+                "Gemini API Error ({}): {}",
+                status,
+                resp.error.unwrap().message
+            )
+        );
 
         let text = resp
             .candidates

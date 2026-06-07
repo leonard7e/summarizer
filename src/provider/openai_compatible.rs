@@ -1,5 +1,5 @@
 use super::{LlmProvider, PromptPart};
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, ensure};
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use reqwest::{Client, header};
@@ -98,7 +98,12 @@ struct ApiError {
 
 #[async_trait]
 impl LlmProvider for OpenAiCompatibleProvider {
-    async fn complete(&self, system_instruction: &str, prompt_parts: &[PromptPart], model: &str) -> Result<String> {
+    async fn complete(
+        &self,
+        system_instruction: &str,
+        prompt_parts: &[PromptPart],
+        model: &str,
+    ) -> Result<String> {
         let content_parts: Vec<OpenAiContentPart> = prompt_parts
             .iter()
             .map(|p| match p {
@@ -143,20 +148,25 @@ impl LlmProvider for OpenAiCompatibleProvider {
         let res = self.client.post(&url).json(&req_body).send().await?;
 
         let status = res.status();
-        if !status.is_success() {
-            let error_text = res.text().await.unwrap_or_default();
-            return Err(anyhow!(
+        ensure!(
+            status.is_success(),
+            anyhow!(
                 "OpenAI API HTTP Error ({}): {}",
                 status,
-                error_text
-            ));
-        }
+                res.text().await.unwrap_or_default()
+            )
+        );
 
         let resp: ChatCompletionResponse = res.json().await?;
 
-        if let Some(err) = resp.error {
-            return Err(anyhow!("OpenAI API Error ({}): {}", status, err.message));
-        }
+        ensure!(
+            resp.error.is_none(),
+            anyhow!(
+                "OpenAI API Error ({}): {}",
+                status,
+                resp.error.unwrap().message
+            )
+        );
 
         let content = resp
             .choices
