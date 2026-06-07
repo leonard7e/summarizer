@@ -2,7 +2,7 @@ use crate::cli::BatchingMode;
 use crate::config::Config;
 use crate::file::{self, FileData, FileType, ProcessedFile};
 use crate::provider::{LlmProvider, ModelId, PromptPart, create_provider};
-use anyhow::{Result, anyhow};
+use anyhow::{Result, anyhow, ensure};
 use std::path::PathBuf;
 
 /// Rough chars-per-token ratio for typical UTF-8 prose / code.
@@ -749,9 +749,7 @@ pub async fn run_summarize_loop(
     batching_mode: BatchingMode,
     max_concurrency: usize,
 ) -> Result<()> {
-    if files.is_empty() {
-        return Err(anyhow!("No files provided."));
-    }
+    ensure!(!files.is_empty(), "No files provided.");
 
     let model_id = ModelId::parse(model_str)?;
     let provider = create_provider(&model_id.provider, &config)?;
