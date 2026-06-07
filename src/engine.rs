@@ -118,10 +118,7 @@ fn build_system_prompt(instruction: &str) -> String {
 /// when no prior result is available (first batch).
 fn append_previous_result(user_text: &mut String, previous_result: Option<&str>) {
     user_text.push_str("<previous_result>\n");
-    match previous_result {
-        Some(prev) => user_text.push_str(prev),
-        None => user_text.push_str("None yet, this is the first batch."),
-    }
+    user_text.push_str(previous_result.unwrap_or("None yet, this is the first batch."));
     user_text.push_str("\n</previous_result>\n\n");
 }
 
@@ -809,6 +806,30 @@ pub async fn run_summarize_loop(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn test_append_previous_result_uses_placeholder_when_missing() {
+        let mut user_text = String::new();
+
+        append_previous_result(&mut user_text, None);
+
+        assert_eq!(
+            user_text,
+            "<previous_result>\nNone yet, this is the first batch.\n</previous_result>\n\n"
+        );
+    }
+
+    #[test]
+    fn test_append_previous_result_inserts_previous_result() {
+        let mut user_text = String::new();
+
+        append_previous_result(&mut user_text, Some("previous summary"));
+
+        assert_eq!(
+            user_text,
+            "<previous_result>\nprevious summary\n</previous_result>\n\n"
+        );
+    }
 
     #[test]
     fn test_force_pairwise_grouping() {
