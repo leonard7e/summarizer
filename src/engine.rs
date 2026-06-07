@@ -298,30 +298,43 @@ fn group_texts_into_batches(texts: Vec<String>, budget_chars: usize) -> Vec<Vec<
     batches
 }
 
-/// Helper to clamp `max_output_tokens` when it exceeds the model's context window
-/// or leaves less than 1024 tokens for input.
+/// Prints a warning when `max_output_tokens` is clamped to fit the context window.
+fn warn_token_clamp(max_output: usize, new_max: usize, message: &str) {
+    eprintln!(
+        "Warning: Configured max_output_tokens ({max_output}) {message} \
+         Clamping max_output_tokens to {new_max} tokens."
+    );
+}
+
+/// Clamps `max_output_tokens` when it exceeds the model's context window
+/// or leaves less than `MIN_RESERVED_INPUT_TOKENS` for input.
 fn clamp_max_output_tokens(max_output: usize, api_limit: usize) -> usize {
     if max_output >= api_limit {
         let new_max = api_limit / 2;
-        eprintln!(
-            "Warning: Configured max_output_tokens ({}) is greater than or equal to the model's context limit ({}). \
-             Clamping max_output_tokens to {} tokens to allow space for input.",
-            max_output, api_limit, new_max
+        warn_token_clamp(
+            max_output,
+            new_max,
+            &format!(
+                "is >= the model's context limit ({api_limit}). \
+                 To allow space for input:"
+            ),
         );
-        new_max
-    } else if api_limit.saturating_sub(max_output) < MIN_RESERVED_INPUT_TOKENS {
+        return new_max;
+    }
+
+    if api_limit.saturating_sub(max_output) < MIN_RESERVED_INPUT_TOKENS {
         let new_max = api_limit
             .saturating_sub(MIN_RESERVED_INPUT_TOKENS)
             .max(api_limit / 2);
-        eprintln!(
-            "Warning: Configured max_output_tokens ({}) leaves too little space for input in the context window ({}). \
-             Clamping max_output_tokens to {} tokens.",
-            max_output, api_limit, new_max
+        warn_token_clamp(
+            max_output,
+            new_max,
+            &format!("leaves too little space for input in the context window ({api_limit})."),
         );
-        new_max
-    } else {
-        max_output
+        return new_max;
     }
+
+    max_output
 }
 
 /// Fallback to forced pair-wise batching of texts to guarantee progress
@@ -866,5 +879,184 @@ mod tests {
 
         // Too little input space left (< 1024): clamp to api_limit - 1024 (or api_limit/2 if higher)
         assert_eq!(clamp_max_output_tokens(7500, 8192), 7168);
+    }
+
+    // --------------------------------------------------------------------
+    // compute_file_budget
+    // --------------------------------------------------------------------
+
+    #[test]
+    fn test_compute_file_budget_returns_zero_when_no_room() {
+        // instruction + max_output + overhead already exceed api_limit
+        let budget = compute_file_budget(500, 500, &"a".repeat(500 * 4), None);
+        assert_eq!(budget, 0);
+    }
+
+    #[test]
+    fn test_compute_file_budget_with_no_previous_result() {
+        // api_limit=10000, max_output=2000, short instruction (5 chars)
+        // instruction_tokens = 5/4 + 1 = 2
+        // overhead_tokens = (2000/16).min(512) = 125
+        // reserved = 2 + 0 + 2000 + 125 = 2127
+        // budget = (10000 - 2127) * 4 = 7873 * 4 = 31492
+        let budget = compute_file_budget(10_000, 2000, "hello", None);
+        assert_eq!(budget, 31_492);
+    }
+
+    #[test]
+    fn test_compute_file_budget_previous_result_reduces_budget() {
+        let b1 = compute_file_budget(10_000, 2000, "hello", None);
+        let b2 = compute_file_budget(10_000, 2000, "hello", Some("prev"));
+        assert!(b2 < b1);
+        // prev is 4 chars → 4/4+1=2 extra tokens → 2*4=8 fewer chars
+        assert_eq!(b1 - b2, 8);
+    }
+
+    #[test]
+    fn test_compute_file_budget_saturates_at_zero() {
+        // Very large previous_result should clamp to zero, not underflow
+        let budget = compute_file_budget(1000, 4000, &"x".repeat(4000), Some(&"y".repeat(4000)));
+        assert_eq!(budget, 0);
+    }
+
+    #[test]
+    fn test_compute_file_budget_overhead_capped_at_512() {
+        // max_output=20000 -> raw overhead=1250, capped to 512
+        // reserved = 1 + 0 + 20000 + 512 = 20513
+        let b_big_out = compute_file_budget(50_000, 20_000, "x", None);
+        // max_output=10000 -> raw overhead=625, capped to 512
+        // reserved = 1 + 0 + 10000 + 512 = 10513
+        let b_small_out = compute_file_budget(50_000, 10_000, "x", None);
+        // Overhead is the same (capped at 512), so the budget difference
+        // comes solely from the max_output gap: 10000 * 4 = 40000
+        assert_eq!(b_small_out - b_big_out, 40_000);
+    }
+
+    // --------------------------------------------------------------------
+    // group_texts_into_batches
+    // --------------------------------------------------------------------
+
+    #[test]
+    fn test_group_texts_into_batches_empty_input() {
+        let batches = group_texts_into_batches(vec![], 100);
+        assert!(batches.is_empty());
+    }
+
+    #[test]
+    fn test_group_texts_into_batches_single_batch() {
+        let texts = vec!["aa".to_string(), "bb".to_string()];
+        let batches = group_texts_into_batches(texts, 100);
+        assert_eq!(batches, vec![vec!["aa", "bb"]]);
+    }
+
+    #[test]
+    fn test_group_texts_into_batches_splits_when_needed() {
+        // budget=2, texts "a" "b" "c"
+        // "a" (1) -> current_size=1
+        // "b" (1) -> 1+1=2, not > 2, so added -> current_size=2
+        // "c" (1) -> 2+1=3 > 2 -> split! batches=[['a','b']], new batch=['c']
+        let texts = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let batches = group_texts_into_batches(texts, 2);
+        assert_eq!(batches, vec![vec!["a", "b"], vec!["c"]]);
+    }
+
+    #[test]
+    fn test_group_texts_into_batches_exact_boundary() {
+        // budget=2, texts "a" "b" "c" → each batch should respect limit
+        let texts = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        let batches = group_texts_into_batches(texts, 2);
+        assert_eq!(batches, vec![vec!["a", "b"], vec!["c"]]);
+    }
+
+    #[test]
+    fn test_group_texts_into_batches_large_text_alone() {
+        // A text exceeding the budget is still placed in its own batch
+        let texts = vec!["abcdefghij".to_string()]; // 10 chars > budget 5
+        let batches = group_texts_into_batches(texts, 5);
+        assert_eq!(batches, vec![vec!["abcdefghij"]]);
+    }
+
+    #[test]
+    fn test_group_texts_into_batches_preserves_order() {
+        let texts: Vec<String> = (0..10).map(|i| format!("t{i}")).collect();
+        let batches = group_texts_into_batches(texts, 6);
+        // Collect all texts back in order and verify nothing was lost
+        let flattened: Vec<String> = batches.into_iter().flatten().collect();
+        let expected: Vec<String> = (0..10).map(|i| format!("t{i}")).collect();
+        assert_eq!(flattened, expected);
+    }
+
+    // --------------------------------------------------------------------
+    // estimate_file_cost
+    // --------------------------------------------------------------------
+
+    fn make_text_file(text: &str) -> ProcessedFile {
+        ProcessedFile {
+            metadata: file::FileMetadata {
+                file_name: String::from("test.txt"),
+                file_type: file::FileType::Text {
+                    encoding: String::from("utf-8"),
+                },
+            },
+            data: file::FileData::Text(text.to_string()),
+        }
+    }
+
+    fn make_audio_file(duration_secs: f64) -> ProcessedFile {
+        ProcessedFile {
+            metadata: file::FileMetadata {
+                file_name: String::from("test.wav"),
+                file_type: file::FileType::Audio {
+                    mime_type: String::from("audio/wav"),
+                },
+            },
+            data: file::FileData::Audio(vec![0; 100], duration_secs),
+        }
+    }
+
+    fn make_video_file(duration_secs: f64) -> ProcessedFile {
+        ProcessedFile {
+            metadata: file::FileMetadata {
+                file_name: String::from("test.mp4"),
+                file_type: file::FileType::Video {
+                    mime_type: String::from("video/mp4"),
+                },
+            },
+            data: file::FileData::Video(vec![0; 100], duration_secs),
+        }
+    }
+
+    #[test]
+    fn test_estimate_file_cost_text_returns_byte_length() {
+        let file = make_text_file("hello world");
+        assert_eq!(estimate_file_cost(&file), 11);
+    }
+
+    #[test]
+    fn test_estimate_file_cost_text_empty() {
+        let file = make_text_file("");
+        assert_eq!(estimate_file_cost(&file), 0);
+    }
+
+    #[test]
+    fn test_estimate_file_cost_audio() {
+        // 10 seconds → 10 * 50.0 = 500 tokens → 500 * 4 = 2000 chars
+        let file = make_audio_file(10.0);
+        assert_eq!(estimate_file_cost(&file), 2000);
+    }
+
+    #[test]
+    fn test_estimate_file_cost_video() {
+        // 5 seconds → 5 * 300.0 = 1500 tokens → 1500 * 4 = 6000 chars
+        let file = make_video_file(5.0);
+        assert_eq!(estimate_file_cost(&file), 6000);
+    }
+
+    #[test]
+    fn test_estimate_file_cost_zero_duration() {
+        let audio = make_audio_file(0.0);
+        assert_eq!(estimate_file_cost(&audio), 0);
+        let video = make_video_file(0.0);
+        assert_eq!(estimate_file_cost(&video), 0);
     }
 }
