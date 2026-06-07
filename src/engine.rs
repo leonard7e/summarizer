@@ -390,33 +390,28 @@ async fn check_file_media_support(
     processed: &ProcessedFile,
     provider: &dyn LlmProvider,
     model: &str,
-    images_support_checked: &mut bool,
 ) -> Result<()> {
     match &processed.data {
-        FileData::Image(_) if !*images_support_checked => {
-            *images_support_checked = true;
-            if !provider.supports_images(model).await? {
-                return Err(anyhow!(
-                    "The model '{}' does not support image analysis.",
-                    model
-                ));
-            }
+        FileData::Image(_) => {
+            ensure!(
+                provider.supports_images(model).await?,
+                "The model '{}' does not support image analysis.",
+                model
+            );
         }
         FileData::Audio(_, _) => {
-            if !provider.supports_audio(model).await? {
-                return Err(anyhow!(
-                    "The model '{}' does not support audio analysis.",
-                    model
-                ));
-            }
+            ensure!(
+                provider.supports_audio(model).await?,
+                "The model '{}' does not support audio analysis.",
+                model
+            );
         }
         FileData::Video(_, _) => {
-            if !provider.supports_video(model).await? {
-                return Err(anyhow!(
-                    "The model '{}' does not support video analysis.",
-                    model
-                ));
-            }
+            ensure!(
+                provider.supports_video(model).await?,
+                "The model '{}' does not support video analysis.",
+                model
+            );
         }
         _ => {}
     }
@@ -462,7 +457,6 @@ async fn run_linear_mode(
     let total_files: usize = batches.iter().map(|b| b.len()).sum();
     let mut previous_result: Option<String> = None;
     let mut processed_count = 0;
-    let mut images_support_checked = false;
 
     for (batch_idx, batch_paths) in batches.iter().enumerate() {
         let mut current_batch: Vec<ProcessedFile> = Vec::new();
@@ -477,13 +471,7 @@ async fn run_linear_mode(
 
             match file::read_file(file_path).await {
                 Ok(processed) => {
-                    check_file_media_support(
-                        &processed,
-                        provider,
-                        &model_id.model,
-                        &mut images_support_checked,
-                    )
-                    .await?;
+                    check_file_media_support(&processed, provider, &model_id.model).await?;
 
                     if debug {
                         let file_cost = estimate_file_cost(&processed);
@@ -572,7 +560,6 @@ async fn process_level_zero(
     }
 
     // Read all files for Level 0 batches.
-    let mut images_support_checked = false;
     let mut processed_batches: Vec<Vec<ProcessedFile>> = Vec::with_capacity(total_batches);
     for batch_paths in path_batches {
         let mut batch_files: Vec<ProcessedFile> = Vec::new();
@@ -583,13 +570,7 @@ async fn process_level_zero(
             }
             match file::read_file(file_path).await {
                 Ok(processed) => {
-                    check_file_media_support(
-                        &processed,
-                        provider,
-                        model,
-                        &mut images_support_checked,
-                    )
-                    .await?;
+                    check_file_media_support(&processed, provider, model).await?;
                     batch_files.push(processed);
                 }
                 Err(e) => {
